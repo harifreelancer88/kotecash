@@ -1,0 +1,48 @@
+---
+import Sidebar from '../components/Sidebar.astro';
+import MobileBottomNav from '../components/MobileBottomNav.astro';
+import '../styles/globals.css';
+
+interface Props {
+  title?: string;
+  bare?: boolean;
+}
+
+const { title = 'KoteCash', bare = false } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script is:inline src="https://unpkg.com/lucide@latest" defer></script>
+    <script is:inline src="/chart.umd.min.js" defer></script>
+    <script is:inline>
+      (function() {
+        const collapsed = localStorage.getItem('sidebar-collapsed');
+        if (collapsed === 'true') {
+          document.documentElement.classList.add('sidebar-collapsed');
+        }
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen bg-[var(--c-bg)] text-[var(--c-ink)] antialiased">
+    {bare ? (
+      <slot />
+    ) : (
+      <div class="flex min-h-screen">
+        <Sidebar />
+        <main id="main-content" class="flex-1 min-h-screen p-5 md:p-8 pb-20 md:pb-8 relative" style="z-index:1;">
+          <div id="pageContent"><p style="color:var(--c-sub);">Loading…</p></div>
+        </main>
+        <MobileBottomNav />
+      </div>
+    )}
+    {!bare && <script is:inline src="/app.js?v=6" defer></script>}
+  </body>
+</html>

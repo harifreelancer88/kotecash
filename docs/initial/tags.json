@@ -1,0 +1,24 @@
+{
+  "project": "kotecash",
+  "generated": "2026-06-20",
+  "version": "01",
+  "tags": {
+    "domain": ["personal-finance", "bookkeeping", "budgeting"],
+    "project_type": ["web-app", "pwa", "api"],
+    "personas": ["user"],
+    "modules": [
+      "auth",
+      "api-tokens",
+      "transactions",
+      "ledger-view",
+      "stat-view",
+      "categories",
+      "budgets",
+      "dashboard"
+    ],
+    "tech_stack": ["hono", "astro", "tailwind-css", "daisyui", "cloudflare-d1"],
+    "integrations": ["cloudflare-workers", "cloudflare-pages", "cloudflare-d1"],
+    "scale": "small",
+    "platform": ["web"]
+  }
+}

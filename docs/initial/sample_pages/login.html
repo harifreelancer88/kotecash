@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>kotecash — Login</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css" rel="stylesheet">
+<style>
+  :root {
+    --c-bg: #F7F8F0; --c-surface: #EDF0E8; --c-card: #FFFFFF;
+    --c-primary: #355872; --c-focus: #7AAACE; --c-ink: #355872; --c-sub: #6B7D8E;
+    --radius: 10px;
+  }
+  body {
+    background: var(--c-bg);
+    color: var(--c-ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 16px;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      linear-gradient(rgba(53,88,114,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(53,88,114,0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+  .card {
+    background: var(--c-card);
+    border: 1px solid rgba(53,88,114,0.06);
+    border-radius: var(--radius);
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 360px;
+    padding: 32px;
+  }
+  .btn-primary {
+    background: var(--c-primary);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    border-radius: var(--radius);
+    font-weight: 600;
+  }
+  .btn-primary:hover { background: #2A4A63; }
+  input {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--c-focus);
+    background: #fff;
+    color: var(--c-ink);
+    font-size: 14px;
+    font-family: 'Inter', system-ui, sans-serif;
+    box-sizing: border-box;
+  }
+  input:focus { outline: none; border-color: var(--c-primary); }
+  .error-msg { color: #C44B4B; font-size: 12px; margin-top: 8px; display: none; }
+  .error-msg.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <div style="font-size: 18px; font-weight: 700; color: var(--c-primary);">📒 kotecash</div>
+    <p style="font-size: 12px; color: var(--c-sub); margin-top: 4px;">Sign in to your account</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 16px;">
+    <div>
+      <label style="display: block; font-size: 12px; color: var(--c-sub); margin-bottom: 4px;">Email</label>
+      <input type="email" id="email" placeholder="you@email.com" value="kot@example.com">
+    </div>
+    <div>
+      <label style="display: block; font-size: 12px; color: var(--c-sub); margin-bottom: 4px;">Password</label>
+      <input type="password" id="password" placeholder="••••••••" value="password">
+    </div>
+
+    <div id="error" class="error-msg">Invalid email or password</div>
+
+    <button class="btn-primary" style="width: 100%; padding: 10px; font-size: 14px;" onclick="doLogin()">
+      Sign In
+    </button>
+  </div>
+
+  <p style="text-align: center; font-size: 11px; color: var(--c-sub); margin-top: 20px;">
+    Single account — household use only
+  </p>
+</div>
+
+<script>
+function doLogin() {
+  var email = document.getElementById('email').value;
+  var pass  = document.getElementById('password').value;
+  var err   = document.getElementById('error');
+
+  if (!email || !pass) {
+    err.textContent = 'Email and password are required';
+    err.classList.add('show');
+    return;
+  }
+
+  // Mock auth — real app calls POST /api/auth/login
+  if (email === 'kot@example.com' && pass === 'password') {
+    window.location.href = 'index.html?page=dashboard';
+  } else {
+    err.textContent = 'Invalid email or password';
+    err.classList.add('show');
+  }
+}
+
+// Submit on Enter
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') doLogin();
+});
+</script>
+
+</body>
+</html>

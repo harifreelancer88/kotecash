@@ -1,0 +1,17 @@
+name = "kotecash"
+main = "dist/_worker.js/index.js"
+compatibility_date = "2026-06-21"
+workers_dev = true
+
+# Static assets (Astro build output)
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+# D1 database. Leave database_id empty — "Deploy to Cloudflare" auto-provisions it.
+# For manual setup, run `npx wrangler d1 create kotecash-db` and paste the printed id here.
+[[d1_databases]]
+binding = "DB"
+database_name = "kotecash-db"
+database_id = "e46585a2-398b-47db-a310-b26cd62714b9"
+migrations_dir = "db/migrations"

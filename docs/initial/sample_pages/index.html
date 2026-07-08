@@ -1,0 +1,2178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>kotecash — Mockup v3</title>
+
+<!-- Dependencies (CDN for mockup only — real app uses npm packages) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+
+<style>
+  /* ===== Design Tokens ===== */
+  :root {
+    --c-bg:       #F7F8F0;   /* Off-White Cream — main background */
+    --c-surface:  #EDF0E8;   /* Cool Ivory — sidebar, cards */
+    --c-card:     #FFFFFF;   /* Pure white — individual card rows */
+    --c-primary:  #355872;   /* Steel Navy — CTAs, headings, active nav */
+    --c-focus:    #7AAACE;   /* Atlantic Blue — input borders, chart fills */
+    --c-accent:   #9CD5FF;   /* Sky Blue — badges, secondary indicators */
+    --c-success:  #4A8C6F;   /* Sea Green — income, UNDER badges */
+    --c-danger:   #C44B4B;   /* Muted Crimson — expense, OVER badges */
+    --c-warning:  #D4A24E;   /* Golden Sand — warning/approaching */
+    --c-ink:      #355872;   /* Deep Navy — body text */
+    --c-sub:      #6B7D8E;   /* Slate Gray — labels, placeholders */
+    --c-border:   rgba(53, 88, 114, 0.06);  /* Subtle borders */
+    --radius:     10px;      /* Card border radius */
+  }
+
+  /* ===== Base ===== */
+  body {
+    background: var(--c-bg);
+    color: var(--c-ink);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* ===== Background Grid Pattern ===== */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      linear-gradient(rgba(53, 88, 114, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(53, 88, 114, 0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  main {
+    position: relative;
+    z-index: 1;
+    overflow-y: auto;
+    min-height: 100vh;
+  }
+
+  /* ===== Sidebar ===== */
+  .sidebar {
+    background: var(--c-surface);
+    border-right: 1px solid var(--c-border);
+    transition: width 0.2s ease;
+    overflow: hidden;
+  }
+  .sidebar.expanded  { width: 240px; }
+  .sidebar.collapsed { width: 56px; }
+
+  /* Hide text labels when collapsed */
+  .sidebar .nav-label,
+  .sidebar .nav-section-label,
+  .sidebar .brand-text {
+    transition: opacity 0.15s;
+  }
+  .sidebar.collapsed .nav-label,
+  .sidebar.collapsed .nav-section-label,
+  .sidebar.collapsed .brand-text,
+  .sidebar.collapsed .collapse-hint {
+    opacity: 0;
+    width: 0;
+    display: none;
+  }
+
+  .toggle-btn {
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .sidebar.collapsed .toggle-btn {
+    transform: rotate(180deg);
+  }
+
+  /* ===== Navigation ===== */
+  .nav-item {
+    color: var(--c-sub);
+    transition: all 0.15s;
+    white-space: nowrap;
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin: 1px 4px;
+  }
+  .nav-item:hover {
+    color: var(--c-primary);
+    background: rgba(53, 88, 114, 0.05);
+  }
+  .nav-item.active {
+    color: var(--c-primary);
+    background: rgba(53, 88, 114, 0.08);
+    font-weight: 600;
+  }
+
+  .nav-section-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--c-sub);
+    letter-spacing: 0.06em;
+    padding: 16px 12px 6px;
+    text-transform: uppercase;
+  }
+
+  /* ===== Cards ===== */
+  .card {
+    background: var(--c-card);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+  }
+
+  /* Individual row card (Budgets, Ledger, Cicilan) */
+  .card-row {
+    background: var(--c-card);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+    transition: box-shadow 0.15s;
+  }
+  .card-row:hover {
+    box-shadow: 0 1px 4px rgba(53, 88, 114, 0.05);
+  }
+
+  /* ===== Buttons ===== */
+  .btn-primary {
+    background: var(--c-primary);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    border-radius: var(--radius);
+    font-weight: 600;
+  }
+  .btn-primary:hover {
+    background: #2A4A63;
+  }
+
+  /* ===== Status Badges ===== */
+  .badge-under {
+    color: var(--c-success);
+    background: rgba(74, 140, 111, 0.08);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-over {
+    color: var(--c-danger);
+    background: rgba(196, 75, 75, 0.08);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-track {
+    color: var(--c-focus);
+    background: rgba(122, 170, 206, 0.10);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* ===== Health Metrics Tags ===== */
+  .health-tag {
+    background: rgba(53, 88, 114, 0.04);
+    border-radius: 8px;
+    padding: 10px 14px;
+    text-align: center;
+  }
+
+  /* ===== Typography ===== */
+  .mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+  .page-subtitle {
+    font-size: 13px;
+    color: var(--c-sub);
+    margin-top: -4px;
+    margin-bottom: 20px;
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--c-sub);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* ===== Page Visibility ===== */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ===== Mobile Nav ===== */
+  .mobile-nav { display: none; }
+  @media (max-width: 768px) {
+    .sidebar { display: none !important; }
+    .mobile-nav {
+      display: flex;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--c-surface);
+      border-top: 1px solid var(--c-border);
+      z-index: 50;
+      justify-content: space-around;
+      padding: 6px 0;
+      /* height for calc reference */
+      height: 56px;
+    }
+    .main-content {
+      margin-left: 0 !important;
+      padding-top: 20px !important;
+      padding-bottom: 80px !important;
+    }
+    .flex.min-h-screen {
+      min-height: auto;
+    }
+    .card-row {
+      flex-wrap: wrap;
+    }
+    /* Modal → bottom sheet on mobile */
+    .modal-mask {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 100;
+      display: flex; align-items: flex-end; justify-content: center;
+    }
+    .modal-content {
+      background: var(--c-card); border-radius: 16px 16px 0 0;
+      width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto;
+      padding: 20px; animation: slideUp 0.2s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    @media (min-width: 769px) {
+      .modal-mask { align-items: center; }
+      .modal-content { border-radius: 12px; margin: 16px; max-height: 80vh; }
+    }
+  }
+
+  /* ===== Form Elements ===== */
+  input[type=range] {
+    accent-color: var(--c-primary);
+  }
+
+  /* ===== Charts ===== */
+  canvas {
+    max-width: 100%;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- MOBILE BOTTOM NAVIGATION -->
+<!-- ============================================================ -->
+<nav class="mobile-nav" id="mobileNav"></nav>
+
+<!-- ============================================================ -->
+<!-- MAIN LAYOUT -->
+<!-- ============================================================ -->
+<div class="flex min-h-screen">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar expanded fixed left-0 top-0 bottom-0 z-40 flex flex-col" id="sidebar">
+    <!-- Brand -->
+    <div class="flex items-center justify-between px-3 py-4">
+      <span class="brand-text text-lg font-bold" style="color: var(--c-primary);">
+        kotecash
+      </span>
+      <button onclick="toggleSidebar()"
+              class="toggle-btn p-1"
+              style="color: var(--c-sub);"
+              onmouseover="this.style.color='var(--c-primary)'"
+              onmouseout="this.style.color='var(--c-sub)'">
+        <i data-lucide="panel-left-close" class="w-4 h-4" id="toggleIcon"></i>
+      </button>
+    </div>
+
+    <!-- Navigation (populated by JS) -->
+    <nav id="sidebarNav" class="flex flex-col flex-1 px-1 overflow-y-auto"></nav>
+
+    <!-- Logout -->
+    <div class="px-3 pb-2">
+      <a href="login.html"
+         class="nav-item flex items-center gap-3"
+         style="display: flex;">
+        <i data-lucide="log-out" class="w-4 h-4 flex-shrink-0"></i>
+        <span class="nav-label text-sm">Logout</span>
+      </a>
+    </div>
+
+    <!-- Version footer -->
+    <div class="collapse-hint px-3 pb-4" style="font-size: 10px; color: var(--c-sub);">
+      v0.3 mockup — design reference
+    </div>
+  </aside>
+
+  <!-- ===== MAIN CONTENT AREA ===== -->
+  <main class="main-content flex-1 transition-all duration-200 p-5 md:p-8"
+        id="mainContent"
+        style="margin-left: 240px;">
+    <div id="pageContent"></div>
+  </main>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- APPLICATION JAVASCRIPT -->
+<!-- ============================================================ -->
+<script>
+/* =================================================================
+   kotecash Mockup — Client-Side Router & Mock Data
+   All mock data is inline. Real app replaces this with API calls.
+   ================================================================= */
+
+// ─── State ──────────────────────────────────────────────────────
+var sidebarExpanded = true;
+var currentPage     = 'dashboard';
+var charts          = {};   // Chart.js instances, destroyed on page switch
+
+// ─── Sidebar Toggle ─────────────────────────────────────────────
+function toggleSidebar() {
+  sidebarExpanded = !sidebarExpanded;
+
+  var sidebar = document.getElementById('sidebar');
+  var main    = document.getElementById('mainContent');
+  var icon    = document.getElementById('toggleIcon');
+
+  sidebar.classList.toggle('expanded',  sidebarExpanded);
+  sidebar.classList.toggle('collapsed', !sidebarExpanded);
+  main.style.marginLeft = sidebarExpanded ? '240px' : '56px';
+
+  icon.setAttribute('data-lucide',
+    sidebarExpanded ? 'panel-left-close' : 'panel-left-open'
+  );
+  lucide.createIcons();
+}
+
+// ─── Navigation Definition ──────────────────────────────────────
+// Grouped into sections matching the sidebar design spec
+var navSections = [
+  {
+    label: 'CORE',
+    items: [
+      { id: 'dashboard',  label: 'Dashboard',   icon: 'layout-dashboard' },
+      { id: 'ledger',     label: 'Ledger',       icon: 'scroll-text'      },
+      { id: 'stats',      label: 'Statistics',   icon: 'bar-chart-3'      },
+    ]
+  },
+  {
+    label: 'MANAGE',
+    items: [
+      { id: 'categories', label: 'Categories',   icon: 'tags'             },
+      { id: 'budgets',    label: 'Budgets',       icon: 'wallet'           },
+      { id: 'creditcard', label: 'Credit Card',   icon: 'credit-card'      },
+      { id: 'wallets',    label: 'Wallets',        icon: 'wallet'            },
+      { id: 'cicilan',    label: 'Cicilan',       icon: 'landmark'         },
+    ]
+  },
+  {
+    label: 'ANALYZE',
+    items: [
+      { id: 'networth',   label: 'Net Worth',     icon: 'line-chart'       },
+      { id: 'scenarios',  label: 'What-If',        icon: 'calculator'       },
+      { id: 'goals',      label: 'Goals',          icon: 'target'            },
+      { id: 'assets',     label: 'Assets',         icon: 'briefcase'        },
+    ]
+  },
+  {
+    label: 'SETTINGS',
+    items: [
+      { id: 'account',    label: 'Account',        icon: 'user'             },
+      { id: 'api',        label: 'API & AI',        icon: 'key'              },
+    ]
+  },
+];
+
+// Mobile nav: 5 items max — grouped for non-focused pages
+var mobileNavItems = [
+  { id: 'dashboard',  label: 'Home',    icon: 'layout-dashboard' },
+  { id: 'ledger',     label: 'Ledger',  icon: 'scroll-text'      },
+  { id: 'stats',      label: 'Stats',   icon: 'bar-chart-3'      },
+  { id: 'cicilan',    label: 'Debt',    icon: 'credit-card'      },
+  { id: 'more',       label: 'More',    icon: 'ellipsis'         },
+];
+
+// Build sidebar nav HTML
+function buildNav(container, isMobile) {
+  var html = '';
+
+  if (!isMobile) {
+    // Desktop: grouped with section labels
+    navSections.forEach(function (section) {
+      html += '<div class="nav-section-label">' + section.label + '</div>';
+      section.items.forEach(function (page) {
+        var isActive = (section.label === 'CORE' && page.id === 'dashboard') ? ' active' : '';
+        html += '<a href="#" onclick="navigate(\'' + page.id + '\'); return false;"' +
+                ' class="nav-item flex items-center gap-3' + isActive + '"' +
+                ' data-page="' + page.id + '">' +
+                '<i data-lucide="' + page.icon + '" class="w-4 h-4 flex-shrink-0"></i>' +
+                '<span class="nav-label text-sm">' + page.label + '</span>' +
+                '</a>';
+      });
+    });
+  } else {
+    // Mobile: 5 items compact
+    mobileNavItems.forEach(function (item) {
+      var isActive = (item.id === 'dashboard') ? ' active' : '';
+      html += '<a href="#" onclick="handleMobileNav(\'' + item.id + '\'); return false;"' +
+              ' class="nav-item flex flex-col items-center gap-0.5 px-1 py-1 rounded-lg"' +
+              ' style="font-size:10px; color: var(--c-sub);"' +
+              ' data-page="' + item.id + '">' +
+              '<i data-lucide="' + item.icon + '" class="w-4 h-4"></i>' +
+              '<span class="nav-label">' + item.label + '</span>' +
+              '</a>';
+    });
+  }
+
+  container.innerHTML = html;
+  lucide.createIcons();
+}
+
+// Init both navs
+buildNav(document.getElementById('sidebarNav'), false);
+buildNav(document.getElementById('mobileNav'),  true);
+
+// ─── Page Router ────────────────────────────────────────────────
+function navigate(pageId) {
+  // Destroy previous Chart.js instances
+  Object.values(charts).forEach(function (c) {
+    try { c.destroy(); } catch (e) { /* ignore */ }
+  });
+  charts = {};
+
+  currentPage = pageId;
+
+  // Update active state in sidebar (desktop only — mobile nav uses handleMobileNav)
+  document.querySelectorAll('#sidebarNav .nav-item').forEach(function (el) {
+    el.classList.toggle('active', el.dataset.page === pageId);
+  });
+
+  // Render page HTML
+  document.getElementById('pageContent').innerHTML = renderPage(pageId);
+  lucide.createIcons();
+
+  // Initialize charts after DOM is ready
+  setTimeout(function () {
+    if (pageId === 'stats')     initStatsCharts();
+    if (pageId === 'networth')  initNetWorthChart();
+    if (pageId === 'scenarios') initScenarioChart();
+  }, 50);
+}
+
+// ─── Page Dispatcher ────────────────────────────────────────────
+function renderPage(id) {
+  switch (id) {
+    case 'dashboard':  return renderDashboard();
+    case 'ledger':     return renderLedger();
+    case 'stats':      return renderStats();
+    case 'categories': return renderCategories();
+    case 'budgets':    return renderBudgets();
+    case 'cicilan':    return renderCicilan();
+    case 'creditcard': return renderCreditCard();
+    case 'wallets':    return renderWallets();
+    case 'goals':      return renderGoals();
+    case 'networth':   return renderNetWorth();
+    case 'scenarios':  return renderScenarios();
+    case 'assets':     return renderAssets();
+    case 'account':    return renderAccount();
+    case 'api':        return renderAPI();
+    default:           return '<p>Page not found</p>';
+  }
+}
+
+// Mobile "More" menu handler
+var mobileMoreOpen = false;
+function handleMobileNav(id) {
+  if (id === 'more') {
+    var items = [
+      { id: 'categories', label: 'Categories', icon: 'tags' },
+      { id: 'budgets',    label: 'Budgets',    icon: 'wallet' },
+      { id: 'creditcard', label: 'Credit Card',icon: 'credit-card' },
+      { id: 'wallets',    label: 'Wallets',    icon: 'wallet' },
+      { id: 'networth',   label: 'Net Worth',  icon: 'line-chart' },
+      { id: 'scenarios',  label: 'What-If',    icon: 'calculator' },
+      { id: 'assets',     label: 'Assets',     icon: 'briefcase' },
+      { id: 'goals',      label: 'Goals',      icon: 'target' },
+      { id: 'account',    label: 'Account',    icon: 'user' },
+      { id: 'api',        label: 'API & AI',   icon: 'key' },
+    ];
+    var html = '<div style="position:fixed;bottom:56px;left:0;right:0;background:var(--c-surface);'
+             + 'padding:10px 8px 12px;z-index:60;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;">'
+             + items.map(function(item) {
+                 return '<a href="#" onclick="closeMobileMore();navigate(\'' + item.id + '\');return false;"'
+                      + 'class="flex flex-col items-center gap-1 px-2 py-3 rounded-lg hover:bg-[rgba(53,88,114,0.05)]"'
+                      + 'style="color:var(--c-sub);font-size:10px;text-decoration:none;">'
+                      + '<i data-lucide="' + item.icon + '" class="w-5 h-5"></i>'
+                      + '<span>' + item.label + '</span></a>';
+               }).join('')
+             + '</div>';
+    var existing = document.getElementById('mobileMoreMenu');
+    if (existing) { existing.remove(); mobileMoreOpen = false; return; }
+    var div = document.createElement('div');
+    div.id = 'mobileMoreMenu';
+    div.innerHTML = html;
+    document.body.appendChild(div);
+    lucide.createIcons();
+    mobileMoreOpen = true;
+    return;
+  }
+  closeMobileMore();
+  navigate(id);
+}
+function closeMobileMore() {
+  var el = document.getElementById('mobileMoreMenu');
+  if (el) el.remove();
+  mobileMoreOpen = false;
+}
+
+// Wallet helpers
+function walletBalance(name) {
+  var bal = 0;
+  M.walletTxns.forEach(function(t) {
+    if (t.wallet !== name) return;
+    if (t.type === 'income' || t.type === 'transfer_in') bal += t.amount;
+    else bal -= t.amount;
+  });
+  return bal;
+}
+
+function walletEarmarked(name) {
+  return M.earmarks.filter(function(e) { return e.source === name; })
+    .reduce(function(s, e) { return s + e.amount; }, 0);
+}
+
+function walletFree(name) {
+  return walletBalance(name) - walletEarmarked(name);
+}
+
+function goalProgress(name) {
+  return M.earmarks.filter(function(e) { return e.goal === name; })
+    .reduce(function(s, e) { return s + e.amount; }, 0);
+}
+
+// Ledger dropdown toggle
+function toggleWalletDetail(card) {
+  var d = card.querySelector('.wallet-detail');
+  if (d) d.style.display = d.style.display === 'block' ? 'none' : 'block';
+}
+
+function toggleLedgerDropdown(btn) {
+  var row = btn.closest('.ledger-row');
+  var dropdown = row.querySelector('.ledger-dropdown');
+  var isOpen = dropdown.style.display === 'block';
+  document.querySelectorAll('.ledger-dropdown').forEach(function(d) { d.style.display = 'none'; });
+  dropdown.style.display = isOpen ? 'none' : 'block';
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.ledger-dropdown') && !e.target.closest('.ledger-kebab')) {
+    document.querySelectorAll('.ledger-dropdown').forEach(function(d) { d.style.display = 'none'; });
+  }
+});
+
+
+/* =================================================================
+   MOCK DATA
+   Replace with API calls in production (fetch from /api/*)
+   ================================================================= */
+
+var M = {
+  income:      11774644,
+  expense:     8150000,
+  net:         3624644,
+  savingsRate: 0.308,
+  dti:         0.263,
+
+  budgets: [
+    { cat: 'Makan',         budget: 3000000, actual: 580000  },
+    { cat: 'Transport',     budget: 1000000, actual: 125000  },
+    { cat: 'Belanja Cash',  budget: 4000000, actual: 0       },
+    { cat: 'Hiburan',       budget: 1000000, actual: 149000  },
+    { cat: 'Kesehatan',     budget: 500000,  actual: 85000   },
+    { cat: 'PAK AYAN',      budget: 500000,  actual: 0       },
+    { cat: 'Listrik',       budget: 300000,  actual: 0       },
+    { cat: 'Lain-lain',     budget: 500000,  actual: 185000  },
+  ],
+
+  cicilan: [
+    {
+      name:       'BRI KUR',
+      total:      50000000,
+      sisa:       32000000,
+      monthly:    1800000,
+      tenor:      24,
+      bunga:      8.5,
+      start:      '2024-01-01',
+      due:        '2027-01-01',
+      status:     'active'
+    },
+  ],
+
+  txns: [
+    { date: '2026-06-18', cat: 'Makan',        desc: 'GrabFood dinner',   amount: 65000,     method: 'OVO',          type: 'expense' },
+    { date: '2026-06-15', cat: 'Belanja Cash', desc: 'Sewa kos',          amount: 2000000,   method: 'Transfer',     type: 'expense' },
+    { date: '2026-06-14', cat: 'Lain-lain',     desc: 'Pulsa & kuota',    amount: 100000,    method: 'OVO',          type: 'expense' },
+    { date: '2026-06-12', cat: 'Kesehatan',     desc: 'Vitamin + obat',   amount: 85000,     method: 'Cash',         type: 'expense' },
+    { date: '2026-06-10', cat: 'Makan',         desc: 'Makan bareng',     amount: 120000,    method: 'Cash',         type: 'expense' },
+    { date: '2026-06-08', cat: 'Transport',     desc: 'Gojek meeting',    amount: 25000,     method: 'OVO',          type: 'expense' },
+    { date: '2026-06-07', cat: 'Hiburan',       desc: 'Netflix',           amount: 149000,    method: 'CC BCA',       type: 'expense' },
+    { date: '2026-06-05', cat: 'BRI',           desc: 'Cicilan BRI',      amount: 1800000,   method: 'BCA Transfer', type: 'expense' },
+    { date: '2026-06-03', cat: 'Makan',         desc: 'Belanja Indomaret',amount: 350000,    method: 'BCA Debit',    type: 'expense' },
+    { date: '2026-06-02', cat: 'Transport',     desc: 'Bensin Pertalite', amount: 100000,    method: 'Cash',         type: 'expense' },
+    { date: '2026-06-01', cat: 'Makan',         desc: 'GoFood lunch',     amount: 45000,     method: 'OVO',          type: 'expense' },
+    { date: '2026-05-20', cat: 'Gaji M2',       desc: 'Gaji MAY 2026',    amount: 11774644,  method: 'Transfer',     type: 'income'  },
+  ],
+
+  networth: [
+    { month: '2026-01', assets: 15000000, liabilities: 60000000 },
+    { month: '2026-02', assets: 15000000, liabilities: 58200000 },
+    { month: '2026-03', assets: 15000000, liabilities: 56400000 },
+    { month: '2026-04', assets: 15000000, liabilities: 54600000 },
+    { month: '2026-05', assets: 26774644, liabilities: 52800000 },
+    { month: '2026-06', assets: 26774644, liabilities: 51000000 },
+  ],
+
+  creditCards: [
+    {
+      name: 'CC TOKPED', limit: 5000000, balance: 1500000, statementDay: 15, dueDay: 30,
+      minPayment: 50000, minPaymentPct: 10, interestRate: 2.25, annualFee: 0,
+    },
+    {
+      name: 'CC BCA', limit: 15000000, balance: 4500000, statementDay: 1, dueDay: 15,
+      minPayment: 50000, minPaymentPct: 10, interestRate: 2.25, annualFee: 0,
+    },
+  ],
+
+  deposits: [
+    { bank: 'BCA', amount: 50000000, rate: 4.5, tenor: 6, start: '2026-01', maturity: '2026-07', status: 'active' },
+    { bank: 'Mandiri', amount: 25000000, rate: 5.0, tenor: 12, start: '2026-03', maturity: '2027-03', status: 'active' },
+  ],
+
+  // Portfolio accounts — each tracked separately
+  portfolios: [
+    { name: 'RDN Mirae',  value: 15000000 },
+    { name: 'RDN BNI',    value: 8000000  },
+    { name: 'RDN Mandiri',value: 5000000  },
+  ],
+
+  wallets: [
+    { name: 'BCA',         type: 'bank',     balance: 8500000,  number: '123-456-7890' },
+    { name: 'OVO',         type: 'e-wallet', balance: 450000,   number: '0812-3456-7890' },
+    { name: 'GoPay',       type: 'e-wallet', balance: 120000,   number: '0812-3456-7890' },
+    { name: 'Cash',        type: 'cash',     balance: 350000,   number: '' },
+  ],
+
+  walletTxns: [
+    { date: '2026-06-20', wallet: 'OVO',         type: 'expense', amount: 65000,    cat: 'Makan',     desc: 'GrabFood dinner' },
+    { date: '2026-06-20', wallet: 'Cash',        type: 'expense', amount: 120000,   cat: 'Makan',     desc: 'Makan bareng teman' },
+    { date: '2026-06-18', wallet: 'Cash',        type: 'expense', amount: 85000,    cat: 'Kesehatan', desc: 'Vitamin + obat' },
+    { date: '2026-06-15', wallet: 'BCA',         type: 'transfer_out', amount: 500000,  target: 'OVO',   desc: 'Top-up OVO' },
+    { date: '2026-06-15', wallet: 'OVO',         type: 'transfer_in',  amount: 500000,  source: 'BCA',   desc: 'Top-up OVO' },
+    { date: '2026-06-14', wallet: 'OVO',         type: 'expense', amount: 100000,   cat: 'Lain-lain', desc: 'Pulsa & kuota' },
+    { date: '2026-06-10', wallet: 'BCA',         type: 'transfer_out', amount: 200000,  target: 'GoPay', desc: 'Top-up GoPay' },
+    { date: '2026-06-10', wallet: 'GoPay',       type: 'transfer_in',  amount: 200000,  source: 'BCA',   desc: 'Top-up GoPay' },
+    { date: '2026-06-08', wallet: 'OVO',         type: 'expense', amount: 25000,    cat: 'Transport', desc: 'Gojek meeting' },
+    { date: '2026-06-05', wallet: 'BCA',         type: 'expense', amount: 1800000,  cat: 'BRI',      desc: 'Cicilan BRI' },
+    { date: '2026-06-03', wallet: 'BCA',         type: 'expense', amount: 350000,   cat: 'Makan',     desc: 'Belanja Indomaret' },
+    { date: '2026-06-02', wallet: 'Cash',        type: 'expense', amount: 100000,   cat: 'Transport', desc: 'Bensin Pertalite' },
+    { date: '2026-06-01', wallet: 'BCA',         type: 'transfer_out', amount: 2000000, target: 'Cash',   desc: 'Tarik tunai' },
+    { date: '2026-06-01', wallet: 'Cash',        type: 'transfer_in',  amount: 2000000, source: 'BCA',   desc: 'Tarik tunai' },
+    { date: '2026-06-01', wallet: 'OVO',         type: 'expense', amount: 45000,    cat: 'Makan',     desc: 'GoFood lunch' },
+    { date: '2026-05-20', wallet: 'BCA',         type: 'income', amount: 11774644,  cat: 'Gaji M2',  desc: 'Gaji MAY 2026' },
+  ],
+
+  transfers: [
+    { date: '2026-06-15', from: 'BCA', to: 'OVO', amount: 500000, notes: 'Top-up OVO' },
+    { date: '2026-06-10', from: 'BCA', to: 'GoPay', amount: 200000, notes: 'Top-up GoPay' },
+    { date: '2026-06-01', from: 'BCA', to: 'Cash', amount: 2000000, notes: 'Tarik tunai' },
+  ],
+
+  goals: [
+    { name: 'Sekolah Anak',  target: 50000000, icon: 'graduation-cap' },
+    { name: 'Umroh',         target: 80000000, icon: 'map' },
+    { name: 'Dana Darurat',  target: 15000000, icon: 'shield' },
+  ],
+
+  earmarks: [
+    { goal: 'Sekolah Anak', source: 'BCA', amount: 3000000 },
+    { goal: 'Sekolah Anak', source: 'BCA Deposito', amount: 20000000 },
+    { goal: 'Umroh',        source: 'BCA', amount: 2000000 },
+    { goal: 'Umroh',        source: 'RDN Mirae', amount: 5000000 },
+    { goal: 'Dana Darurat', source: 'BCA', amount: 2000000 },
+  ],
+};
+
+
+/* =================================================================
+   UTILITY HELPERS
+   ================================================================= */
+
+// Format number to Indonesian locale (e.g., 11774644 → "11.774.644")
+function fmt(n) {
+  return n.toLocaleString('id-ID');
+}
+
+// Format decimal to percentage string (e.g., 0.308 → "30.8%")
+function pct(n) {
+  return (n * 100).toFixed(1) + '%';
+}
+
+// Savings rate → health badge tier
+function healthBadge(rate) {
+  if (rate >= 0.3) return ['Outstanding',         'bg-[#4A8C6F] text-white', 'award'         ];
+  if (rate >= 0.2) return ['Excellent',           'bg-[#7AAACE] text-white', 'star'          ];
+  if (rate >= 0.1) return ['Good',                'bg-[#D4A24E] text-white', 'thumbs-up'     ];
+  return              ['Needs Improvement',       'bg-[#C44B4B] text-white', 'alert-triangle'];
+}
+
+// Budget actual vs budget → status badge
+function budgetBadge(actual, budget) {
+  var ratio = budget > 0 ? actual / budget : 0;
+  if (ratio > 1)   return ['OVER',      'badge-over',   'alert-triangle' ];
+  if (ratio > 0.9) return ['ON TRACK',  'badge-track',  'check-circle'   ];
+  return             ['UNDER',           'badge-under',  'check-circle-2' ];
+}
+
+
+/* =================================================================
+   PAGE RENDERERS
+   Each function returns an HTML string for that page.
+   Uses template literals with mock data (M.*).
+   In production, data comes from API.
+   ================================================================= */
+
+// ─── DASHBOARD ──────────────────────────────────────────────────
+function renderDashboard() {
+  var health = healthBadge(M.savingsRate);
+  var dtiTier = M.dti < 0.3
+    ? ['Healthy', 'text-[#4A8C6F]']
+    : M.dti < 0.5
+      ? ['High', 'text-[#D4A24E]']
+      : ['Critical', 'text-[#C44B4B]'];
+
+  var totalLiquid = M.wallets.reduce(function(s, w) {
+    return s + (typeof walletBalance === 'function' ? walletBalance(w.name) : w.balance);
+  }, 0);
+  var totalCC = M.creditCards.reduce(function(s, c) { return s + c.balance; }, 0);
+  var totalDep = M.deposits.reduce(function(s, d) { return s + d.amount; }, 0);
+  var totalPorto = M.portfolios.reduce(function(s, p) { return s + p.value; }, 0);
+  var totalAssets = totalDep + totalPorto;
+  var totalCicilanSisa = M.cicilan.reduce(function(s, c) { return s + c.sisa; }, 0);
+  var netWorth = totalLiquid + totalAssets - totalCC - totalCicilanSisa;
+  var totalEarmarked = M.earmarks.reduce(function(s, e) { return s + e.amount; }, 0);
+  var walletEarmarked = M.earmarks.filter(function(e) {
+    return M.wallets.some(function(w) { return w.name === e.source; });
+  }).reduce(function(s, e) { return s + e.amount; }, 0);
+  var totalFree = totalLiquid - walletEarmarked;
+
+  var budgetRows = M.budgets.slice(0, 4).map(function (b) {
+    var pctUsed = b.budget > 0 ? b.actual / b.budget : 0;
+    var st = budgetBadge(b.actual, b.budget);
+    return (
+      '<div class="card-row">' +
+        '<span class="text-xs font-medium flex-shrink-0" style="color:var(--c-ink);width:64px;">' + b.cat + '</span>' +
+        '<div class="flex-1 rounded-full h-1.5 min-w-[60px]" style="background:var(--c-bg);">' +
+          '<div class="h-1.5 rounded-full" style="width:' + Math.min(pctUsed * 100, 100) + '%;background:' + (pctUsed > 1 ? 'var(--c-danger)' : 'var(--c-focus)') + ';"></div>' +
+        '</div>' +
+        '<span class="mono text-[11px] text-right flex-shrink-0" style="width:84px;">Rp' + fmt(b.actual) + '</span>' +
+        '<span class="' + st[1] + ' flex items-center gap-1 flex-shrink-0" style="font-size:10px;">' +
+          '<i data-lucide="' + st[2] + '" class="w-3 h-3"></i> ' + st[0] +
+        '</span>' +
+      '</div>'
+    );
+  }).join('');
+
+  var cicilanRows = M.cicilan.filter(function(c) { return c.status === 'active'; })
+    .map(function(c) {
+      return '<div class="card-row"><i data-lucide="landmark" class="w-3.5 h-3.5 flex-shrink-0" style="color:var(--c-sub);"></i><span class="text-xs font-medium flex-1" style="color:var(--c-ink);">' + c.name + ' <span style="color:var(--c-sub);font-weight:400;">due ' + c.due + '</span></span><span class="mono text-xs flex-shrink-0">Rp' + fmt(c.monthly) + '/mo</span></div>';
+    }).join('');
+
+  var ccUpcoming = M.creditCards.map(function(c) {
+    return '<div class="card-row"><i data-lucide="credit-card" class="w-3.5 h-3.5 flex-shrink-0" style="color:var(--c-sub);"></i><span class="text-xs font-medium flex-1" style="color:var(--c-ink);">' + c.name + ' <span style="color:var(--c-sub);font-weight:400;">due day ' + c.dueDay + '</span></span><span class="mono text-xs flex-shrink-0 ' + (c.balance > 0 ? 'text-[#C44B4B]' : '') + '">Rp' + fmt(c.balance) + '</span></div>';
+  }).join('');
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Home</h1>' +
+    '<div class="flex items-center justify-between mb-2">' +
+      '<p class="page-subtitle" style="margin-bottom:0;">Your financial snapshot</p>' +
+      '<div class="flex gap-2 flex-shrink-0">' +
+        '<select class="select select-sm bg-white text-xs" style="border-color:var(--c-focus);"><option>This Month</option><option>Last Month</option><option>Next Month</option><option>All Time</option></select>' +
+        '<select class="select select-sm bg-white text-xs" style="border-color:var(--c-focus);"><option>2026</option><option>2025</option><option>2027</option></select>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="grid grid-cols-3 gap-3 mb-4">' +
+      '<div class="card p-4"><div class="text-[10px] uppercase tracking-wide mb-1" style="color:var(--c-sub);">Income</div><div class="text-lg font-bold mono" style="color:var(--c-success);">Rp' + fmt(M.income) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">this month</div></div>' +
+      '<div class="card p-4"><div class="text-[10px] uppercase tracking-wide mb-1" style="color:var(--c-sub);">Expense</div><div class="text-lg font-bold mono" style="color:var(--c-danger);">Rp' + fmt(M.expense) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">' + pct(M.expense / M.income) + ' of income</div></div>' +
+      '<div class="card p-4"><div class="text-[10px] uppercase tracking-wide mb-1" style="color:var(--c-sub);">Sisa</div><div class="text-lg font-bold mono" style="color:var(--c-success);">Rp' + fmt(Math.abs(M.net)) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">income \u2212 expense</div></div>' +
+    '</div>' +
+
+    '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">' +
+      '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="wallet" class="w-3.5 h-3.5" style="color:var(--c-focus);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Liquid</span></div><div class="text-lg font-bold mono" style="color:var(--c-success);">Rp' + fmt(totalLiquid) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">' + M.wallets.length + ' wallets</div><div class="flex gap-2 mt-2 pt-2 text-[9px]" style="border-top:1px solid var(--c-border);"><div><span style="color:var(--c-sub);">Free </span><span class="mono font-medium" style="color:var(--c-success);">Rp' + fmt(totalFree) + '</span></div><div><span style="color:var(--c-sub);">Earmarked </span><span class="mono font-medium" style="color:var(--c-focus);">Rp' + fmt(totalEarmarked) + '</span></div></div></div>' +
+      '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="credit-card" class="w-3.5 h-3.5" style="color:var(--c-danger);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">CC Debt</span></div><div class="text-lg font-bold mono" style="color:var(--c-danger);">Rp' + fmt(totalCC) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">' + M.creditCards.length + ' cards</div></div>' +
+      '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="briefcase" class="w-3.5 h-3.5" style="color:var(--c-focus);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Assets</span></div><div class="text-lg font-bold mono" style="color:var(--c-ink);">Rp' + fmt(totalAssets) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">deposits + portfolios</div></div>' +
+      '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="line-chart" class="w-3.5 h-3.5" style="color:var(--c-primary);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Net Worth</span></div><div class="text-lg font-bold mono ' + (netWorth >= 0 ? 'text-[#4A8C6F]' : 'text-[#C44B4B]') + '">Rp' + fmt(Math.abs(netWorth)) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">' + (netWorth >= 0 ? 'positive' : 'negative') + '</div></div>' +
+    '</div>' +
+
+    '<div class="grid grid-cols-2 gap-3 mb-6">' +
+      '<div class="card p-4"><div class="flex items-center justify-between mb-2"><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Monthly Flow</span><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ' + health[1] + '"><i data-lucide="' + health[2] + '" class="w-3 h-3"></i> ' + health[0] + '</span></div><div class="text-xl font-bold mono" style="color:var(--c-ink);">' + pct(M.savingsRate) + '</div><div class="text-[9px] mt-1" style="color:var(--c-sub);">' + pct(M.expense / M.income) + ' spent \u00b7 Rp' + fmt(M.net) + ' sisa \u00b7 Rp' + fmt(totalEarmarked) + ' earmarked</div></div>' +
+      '<div class="card p-4"><div class="flex items-center justify-between mb-2"><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Debt-to-Income</span><span class="text-[10px] font-semibold ' + dtiTier[1] + '">' + dtiTier[0] + '</span></div><div class="text-xl font-bold mono ' + dtiTier[1] + '">' + pct(M.dti) + '</div><div class="text-[9px] mt-1" style="color:var(--c-sub);">Rp' + fmt(M.cicilan.reduce(function(s,c){return s+c.monthly;},0)) + '/mo debt payments</div></div>' +
+    '</div>' +
+
+    '<div class="section-title">Goals</div>' +
+    '<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">' +
+      M.goals.map(function(g) {
+        var prog = goalProgress(g.name);
+        var pctD = g.target > 0 ? Math.min((prog / g.target * 100), 100) : 0;
+        return '<div class="card p-3"><div class="flex items-center justify-between mb-1.5"><div class="flex items-center gap-1.5"><i data-lucide="' + g.icon + '" class="w-3.5 h-3.5" style="color:var(--c-focus);"></i><span class="text-xs font-medium">' + g.name + '</span></div><span class="mono text-xs font-bold ' + (pctD >= 100 ? 'text-[#4A8C6F]' : 'text-[#355872]') + '">' + pctD.toFixed(0) + '%</span></div><div style="height:4px;border-radius:2px;margin-bottom:1px;background:var(--c-bg);"><div style="height:4px;border-radius:2px;width:' + pctD + '%;background:' + (pctD >= 100 ? 'var(--c-success)' : 'var(--c-focus)') + ';"></div></div><div class="text-[9px]" style="color:var(--c-sub);">Rp' + fmt(prog) + ' / Rp' + fmt(g.target) + '</div></div>';
+      }).join('') +
+    '</div>' +
+
+    '<div class="section-title">Budgets</div>' +
+    budgetRows +
+
+    '<div class="section-title mt-6">Upcoming Payments</div>' +
+    cicilanRows +
+    ccUpcoming
+  );
+}
+
+// ─── LEDGER ─────────────────────────────────────────────────────
+function renderLedger() {
+  var rows = M.txns.map(function (t) {
+    var isIncome = t.type === 'income';
+    return (
+      '<div class="card-row ledger-row" style="position:relative;cursor:pointer;">' +
+        '<span class="mono text-[11px] flex-shrink-0" style="color:var(--c-sub);width:68px;">' + t.date + '</span>' +
+        '<span class="text-[11px] font-medium flex-shrink-0" style="width:60px;">' + t.cat + '</span>' +
+        '<span class="text-[11px] flex-1 truncate" style="color:var(--c-sub);min-width:0;">' + t.desc + '</span>' +
+        '<span class="text-[10px] flex-shrink-0 hidden sm:inline" style="color:var(--c-sub);width:48px;">' + t.method + '</span>' +
+        '<span class="mono text-[11px] text-right flex-shrink-0 font-medium ' +
+              (isIncome ? 'text-[#4A8C6F]' : 'text-[#C44B4B]') + '" style="width:105px;">' +
+          (isIncome ? '+' : '-') + ' Rp' + fmt(t.amount) +
+        '</span>' +
+        '<span class="hidden md:flex gap-1 flex-shrink-0" onclick="event.stopPropagation();">' +
+          '<button class="p-1" style="color:var(--c-sub);" onmouseover="this.style.color=\'var(--c-primary)\'" onmouseout="this.style.color=\'var(--c-sub)\'">' +
+            '<i data-lucide="pencil" class="w-3.5 h-3.5"></i>' +
+          '</button>' +
+          '<button class="p-1" style="color:var(--c-sub);" onmouseover="this.style.color=\'var(--c-danger)\'" onmouseout="this.style.color=\'var(--c-sub)\'">' +
+            '<i data-lucide="trash-2" class="w-3.5 h-3.5"></i>' +
+          '</button>' +
+        '</span>' +
+        '<button class="md:hidden p-1 flex-shrink-0 ledger-kebab" style="color:var(--c-sub);" onclick="event.stopPropagation();toggleLedgerDropdown(this);">' +
+          '<i data-lucide="ellipsis-vertical" class="w-4 h-4"></i>' +
+        '</button>' +
+        '<div class="ledger-dropdown" style="display:none;position:absolute;right:4px;top:38px;background:var(--c-card);border:1px solid var(--c-border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(53,88,114,0.10);z-index:30;padding:4px;min-width:120px;" onclick="event.stopPropagation();">' +
+          '<button class="flex items-center gap-2 w-full px-3 py-2 rounded text-xs hover:bg-[rgba(53,88,114,0.05)]" style="color:var(--c-ink);">' +
+            '<i data-lucide="pencil" class="w-3.5 h-3.5"></i> Edit' +
+          '</button>' +
+          '<button class="flex items-center gap-2 w-full px-3 py-2 rounded text-xs hover:bg-[rgba(196,75,75,0.05)]" style="color:var(--c-danger);">' +
+            '<i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete' +
+          '</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Ledger</h1>' +
+    '<p class="page-subtitle">View and manage all your financial transactions</p>' +
+
+    '<div class="flex items-center justify-between mb-4">' +
+      '<div class="flex flex-wrap gap-2 flex-1">' +
+        '<input placeholder="Search notes..." class="input input-sm bg-white text-sm flex-1 min-w-[150px] max-w-xs" style="border-color: var(--c-focus);">' +
+        '<select class="select select-sm bg-white text-sm" style="border-color: var(--c-focus);">' +
+          '<option>All Categories</option>' +
+          ['Makan','Transport','Belanja Cash','Hiburan','Kesehatan','PAK AYAN','Listrik','Lain-lain'].map(function (c) {
+            return '<option>' + c + '</option>';
+          }).join('') +
+        '</select>' +
+        '<select class="select select-sm bg-white text-sm" style="border-color: var(--c-focus);">' +
+          '<option>All</option><option>Income</option><option>Expense</option>' +
+        '</select>' +
+      '</div>' +
+      '<button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 flex-shrink-0 ml-3" onclick="showAddTransaction()">' +
+        '<i data-lucide="plus" class="w-4 h-4"></i> Add' +
+      '</button>' +
+    '</div>' +
+
+    rows
+  );
+}
+
+// ─── STATISTICS ─────────────────────────────────────────────────
+function renderStats() {
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Statistics</h1>' +
+    '<p class="page-subtitle">Visualize income, expenses, and spending patterns</p>' +
+    '<div class="grid grid-cols-1 md:grid-cols-2 gap-5">' +
+      '<div class="card p-5">' +
+        '<div class="section-title">Income vs Expense</div>' +
+        '<div style="height:260px"><canvas id="chartIncomeExpense"></canvas></div>' +
+      '</div>' +
+      '<div class="card p-5">' +
+        '<div class="section-title">Spending by Category</div>' +
+        '<div style="height:260px"><canvas id="chartPie"></canvas></div>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function initStatsCharts() {
+  // ── Bar Chart: Income vs Expense ──
+  var ctx1 = document.getElementById('chartIncomeExpense');
+  if (ctx1) {
+    charts.bar = new Chart(ctx1.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'],
+        datasets: [
+          {
+            label: 'Income',
+            data: [0, 0, 0, 0, M.income, 0],
+            backgroundColor: '#4A8C6F',
+            borderRadius: 4
+          },
+          {
+            label: 'Expense',
+            data: [8150000, 8150000, 8150000, 8150000, 8150000, 8150000],
+            backgroundColor: '#C44B4B',
+            borderRadius: 4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: {
+              color: '#6B7D8E',
+              font: { size: 11 }
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#6B7D8E', font: { size: 10 } },
+            grid: { display: false }
+          },
+          y: {
+            ticks: {
+              color: '#6B7D8E',
+              font: { size: 10 },
+              callback: function (v) {
+                return (v / 1e6).toFixed(1) + 'M';
+              }
+            },
+            grid: { color: 'rgba(53, 88, 114, 0.06)' }
+          }
+        }
+      }
+    });
+  }
+
+  // ── Doughnut: Spending by Category ──
+  var pieData = [
+    { cat: 'Makan',         amt: 580000  },
+    { cat: 'BRI',           amt: 1800000 },
+    { cat: 'Belanja Cash',  amt: 2000000 },
+    { cat: 'Hiburan',       amt: 149000  },
+    { cat: 'Transport',     amt: 125000  },
+    { cat: 'Lain-lain',     amt: 185000  },
+    { cat: 'Other',         amt: 3511000 },
+  ];
+
+  var ctx2 = document.getElementById('chartPie');
+  if (ctx2) {
+    charts.pie = new Chart(ctx2.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: pieData.map(function (d) { return d.cat; }),
+        datasets: [{
+          data: pieData.map(function (d) { return d.amt; }),
+          backgroundColor: [
+            '#7AAACE', '#355872', '#4A8C6F', '#9CD5FF',
+            '#D4A24E', '#6B7D8E', '#C44B4B'
+          ]
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: {
+              color: '#6B7D8E',
+              font: { size: 10 },
+              padding: 12
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+// ─── CATEGORIES ─────────────────────────────────────────────────
+function renderCategories() {
+  var expenseCategories = [
+    'Makan', 'Transport', 'BRI', 'CC TOKPED', 'CC BCA',
+    'Belanja Cash', 'PAK AYAN', 'BERAS', 'CANANG',
+    'Listrik Kampung', 'BPJS Ibu', 'Hiburan', 'Kesehatan', 'Lain-lain'
+  ];
+
+  var incomeCategories = ['Gaji M2', 'Freelance', 'Lain-lain Income'];
+
+  function categoryRow(name) {
+    return (
+      '<div class="flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-[#F7F8F0] text-sm">' +
+        '<span>' + name + '</span>' +
+        '<button class="p-1" style="color: var(--c-sub);" onmouseover="this.style.color=\'var(--c-primary)\'" onmouseout="this.style.color=\'var(--c-sub)\'">' +
+          '<i data-lucide="pencil" class="w-3.5 h-3.5"></i>' +
+        '</button>' +
+      '</div>'
+    );
+  }
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Categories</h1>' +
+    '<p class="page-subtitle">Manage your income and expense categories</p>' +
+    '<div class="flex justify-end mb-4">' +
+      '<button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5" onclick="showAddCategory()">' +
+        '<i data-lucide="plus" class="w-4 h-4"></i> Add Category' +
+      '</button>' +
+    '</div>' +
+    '<div class="grid grid-cols-1 md:grid-cols-2 gap-5">' +
+      '<div class="card p-5">' +
+        '<div class="section-title">Expense Categories</div>' +
+        expenseCategories.map(categoryRow).join('') +
+      '</div>' +
+      '<div class="card p-5">' +
+        '<div class="section-title">Income Categories</div>' +
+        incomeCategories.map(categoryRow).join('') +
+      '</div>' +
+    '</div>'
+  );
+}
+
+// ─── BUDGETS ────────────────────────────────────────────────────
+function renderBudgets() {
+  var rows = M.budgets.map(function (b) {
+    var rem = b.budget - b.actual;
+    var st  = budgetBadge(b.actual, b.budget);
+    return (
+      '<div class="card-row">' +
+        '<span class="text-sm font-medium w-28 flex-shrink-0">' + b.cat + '</span>' +
+        '<span class="mono text-sm w-32 text-right flex-shrink-0">Rp' + fmt(b.budget) + '</span>' +
+        '<span class="mono text-sm w-32 text-right flex-shrink-0 ' +
+              (b.actual > 0 ? 'text-[#C44B4B]' : '') + '"' +
+              (b.actual === 0 ? ' style="color: var(--c-sub);"' : '') + '>' +
+          'Rp' + fmt(b.actual) +
+        '</span>' +
+        '<span class="mono text-sm w-32 text-right flex-shrink-0 font-medium ' +
+              (rem < 0 ? 'text-[#C44B4B]' : 'text-[#4A8C6F]') + '">' +
+          'Rp' + fmt(Math.abs(rem)) +
+        '</span>' +
+        '<span class="' + st[1] + ' flex items-center gap-1 flex-shrink-0">' +
+          '<i data-lucide="' + st[2] + '" class="w-3 h-3"></i> ' + st[0] +
+        '</span>' +
+      '</div>'
+    );
+  }).join('');
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Budgets</h1>' +
+    '<p class="page-subtitle">Set and track monthly spending limits per category</p>' +
+    '<div class="flex items-center justify-between mb-4">' +
+      '<span class="text-sm" style="color: var(--c-sub);">June 2026</span>' +
+      '<button class="btn-primary px-3 py-1.5 rounded-lg text-xs" onclick="showSetBudget()">Set Budget</button>' +
+    '</div>' +
+    rows
+  );
+}
+
+// ─── CICILAN ────────────────────────────────────────────────────
+function renderCicilan() {
+  var cards = M.cicilan.map(function (c, idx) {
+    var monthsLeft = Math.ceil(c.sisa / c.monthly);
+    var pctPaid    = ((c.total - c.sisa) / c.total * 100).toFixed(0);
+
+    // Build amortization table with Month+Year labels
+    var amortRows = '';
+    var remaining = c.sisa;
+    var monthlyRate = c.bunga / 100 / 12;
+    var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var startDate = c.start ? new Date(c.start) : new Date();
+    for (var m = 1; m <= monthsLeft; m++) {
+      var interestPayment = Math.round(remaining * monthlyRate);
+      var principalPayment = c.monthly - interestPayment;
+      if (m === monthsLeft) {
+        principalPayment = remaining;
+        interestPayment = c.monthly - principalPayment;
+        if (interestPayment < 0) interestPayment = 0;
+      }
+      remaining -= principalPayment;
+      if (remaining < 0) remaining = 0;
+      var d = new Date(startDate);
+      d.setMonth(d.getMonth() + m);
+      var monthLabel = monthNames[d.getMonth()] + ' ' + d.getFullYear();
+      amortRows += '<tr style="font-size:11px;"><td class="p-1">' + monthLabel + '</td><td class="p-1 text-right mono">Rp' + fmt(c.monthly) + '</td><td class="p-1 text-right mono">Rp' + fmt(principalPayment) + '</td><td class="p-1 text-right mono">Rp' + fmt(interestPayment) + '</td><td class="p-1 text-right mono">Rp' + fmt(remaining) + '</td></tr>';
+      if (remaining <= 0) break;
+    }
+
+    return (
+      '<div class="card p-5 mb-3" onclick="toggleCicilan(this)" style="cursor:pointer;">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;min-height:40px;">' +
+          '<div>' +
+            '<h3 class="font-semibold">' + c.name +
+              ' <button onclick="event.stopPropagation();showEditCicilan(' + idx + ')" style="background:none;border:none;cursor:pointer;color:var(--c-sub);font-size:11px;margin-left:4px;" title="Edit"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>' +
+              ' <span style="font-size:10px;color:var(--c-sub);">click for schedule</span></h3>' +
+            '<p class="text-xs" style="color: var(--c-sub);">Active · ' + monthsLeft + ' months remaining</p>' +
+          '</div>' +
+          '<span class="mono text-lg font-bold flex-shrink-0" style="color: var(--c-primary);">Rp' + fmt(c.sisa) + '</span>' +
+        '</div>' +
+        '<div style="height:6px;border-radius:3px;margin-bottom:16px;background:var(--c-bg);">' +
+          '<div style="height:6px;border-radius:3px;width:' + pctPaid + '%;background:var(--c-focus);"></div>' +
+        '</div>' +
+        '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">' +
+          '<div><span style="color: var(--c-sub);">Monthly</span><br><span class="mono">Rp' + fmt(c.monthly) + '</span></div>' +
+          '<div><span style="color: var(--c-sub);">Interest</span><br><span class="mono">' + c.bunga + '%</span></div>' +
+          '<div><span style="color: var(--c-sub);">Due Date</span><br><span class="mono">' + c.due + '</span></div>' +
+          '<div><span style="color: var(--c-sub);">Total</span><br><span class="mono">Rp' + fmt(c.total) + '</span></div>' +
+        '</div>' +
+        // Amortization table (hidden by default)
+        '<div class="cicilan-expand" style="display:none;margin-top:16px;padding-top:12px;border-top:1px solid var(--c-border);">' +
+          '<div class="text-xs font-semibold mb-2" style="color: var(--c-sub);">Payment Schedule</div>' +
+          '<div style="overflow-x:auto;"><table class="w-full" style="font-size:11px;">' +
+            '<thead><tr style="color:var(--c-sub);text-transform:uppercase;font-size:10px;letter-spacing:0.03em;">' +
+              '<th class="p-1 text-left">Month</th><th class="p-1 text-right">Payment</th><th class="p-1 text-right">Principal</th><th class="p-1 text-right">Interest</th><th class="p-1 text-right">Remaining</th></tr></thead>' +
+            '<tbody>' + amortRows + '</tbody></table></div>' +
+          '<div class="text-xs mt-2" style="color:var(--c-success);">Debt-free in ' + monthsLeft + ' months</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Cicilan</h1>' +
+    '<p class="page-subtitle">Track your active installments and debt payments — click a card to see month-by-month schedule</p>' +
+    '<div class="flex justify-end mb-4">' +
+      '<button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5" onclick="showAddCicilan()">' +
+        '<i data-lucide="plus" class="w-4 h-4"></i> Add Cicilan' +
+      '</button>' +
+    '</div>' +
+    cards
+  );
+}
+
+// Toggle cicilan amortization expand
+function toggleCicilan(card) {
+  var expand = card.querySelector('.cicilan-expand');
+  if (!expand) return;
+  var isVisible = expand.style.display !== 'none';
+  expand.style.display = isVisible ? 'none' : 'block';
+}
+
+// ─── NET WORTH ──────────────────────────────────────────────────
+function renderNetWorth() {
+  var last  = M.networth[M.networth.length - 1];
+  var prev  = M.networth[M.networth.length - 2];
+  var nw    = last.assets - last.liabilities;
+  var delta = nw - (prev.assets - prev.liabilities);
+
+  var netColor = nw >= 0 ? 'text-[#4A8C6F]' : 'text-[#C44B4B]';
+  var deltaColor = delta >= 0 ? 'text-[#4A8C6F]' : 'text-[#C44B4B]';
+  var deltaSign  = delta >= 0 ? '+' : '';
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Net Worth</h1>' +
+    '<p class="page-subtitle">Track your assets, liabilities, and wealth over time</p>' +
+
+    // Summary cards
+    '<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">' +
+      '<div class="card p-5">' +
+        '<div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Assets</div>' +
+        '<div class="text-xl font-bold mono" style="color: var(--c-success);">Rp' + fmt(last.assets) + '</div>' +
+      '</div>' +
+      '<div class="card p-5">' +
+        '<div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Liabilities</div>' +
+        '<div class="text-xl font-bold mono" style="color: var(--c-danger);">Rp' + fmt(last.liabilities) + '</div>' +
+      '</div>' +
+      '<div class="card p-5">' +
+        '<div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Net Worth</div>' +
+        '<div class="text-xl font-bold mono ' + netColor + '">' +
+          'Rp' + fmt(Math.abs(nw)) +
+          ' <span class="text-sm ' + deltaColor + '">' +
+            deltaSign + fmt(delta) +
+          '</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    // Trend chart
+    '<div class="card p-5">' +
+      '<div class="section-title">Trend</div>' +
+      '<div style="height:280px"><canvas id="chartNetWorth"></canvas></div>' +
+    '</div>'
+  );
+}
+
+function initNetWorthChart() {
+  var ctx = document.getElementById('chartNetWorth');
+  if (!ctx) return;
+
+  var nwData = M.networth.map(function (n) {
+    return {
+      month:       n.month.slice(5),  // "2026-01" → "01"
+      assets:      n.assets,
+      liabilities: n.liabilities,
+      net:         n.assets - n.liabilities
+    };
+  });
+
+  charts.nw = new Chart(ctx.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: nwData.map(function (d) { return d.month; }),
+      datasets: [
+        {
+          label: 'Assets',
+          data: nwData.map(function (d) { return d.assets; }),
+          borderColor: '#4A8C6F',
+          backgroundColor: 'rgba(74, 140, 111, 0.05)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4
+        },
+        {
+          label: 'Liabilities',
+          data: nwData.map(function (d) { return d.liabilities; }),
+          borderColor: '#C44B4B',
+          backgroundColor: 'rgba(196, 75, 75, 0.05)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4
+        },
+        {
+          label: 'Net Worth',
+          data: nwData.map(function (d) { return d.net; }),
+          borderColor: '#7AAACE',
+          borderWidth: 2,
+          tension: 0.3,
+          pointRadius: 4,
+          pointBackgroundColor: '#355872'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: {
+            color: '#6B7D8E',
+            font: { size: 11 }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#6B7D8E', font: { size: 10 } },
+          grid: { display: false }
+        },
+        y: {
+          ticks: {
+            color: '#6B7D8E',
+            font: { size: 10 },
+            callback: function (v) {
+              return (v / 1e6).toFixed(0) + 'M';
+            }
+          },
+          grid: { color: 'rgba(53, 88, 114, 0.06)' }
+        }
+      }
+    }
+  });
+}
+
+// ─── WHAT-IF SIMULATOR ─────────────────────────────────────────
+function renderScenarios() {
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">What-If Simulator</h1>' +
+    '<p class="page-subtitle">Model income and expense changes to see impact on your financial health</p>' +
+
+    // Sliders
+    '<div class="card p-5 mb-6">' +
+      '<div class="section-title">Adjust Parameters</div>' +
+      '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">' +
+        '<div>' +
+          '<label class="block text-xs mb-2" style="color: var(--c-sub);">Income Change (%)</label>' +
+          '<div class="flex items-center gap-3">' +
+            '<input type="range" id="incomeSlider" min="-50" max="100" value="0" step="5" class="flex-1" oninput="updateScenario()">' +
+            '<span class="mono text-sm w-16 text-right" id="incomeVal">0%</span>' +
+          '</div>' +
+        '</div>' +
+        '<div>' +
+          '<label class="block text-xs mb-2" style="color: var(--c-sub);">Expense Change (%)</label>' +
+          '<div class="flex items-center gap-3">' +
+            '<input type="range" id="expenseSlider" min="-50" max="100" value="0" step="5" class="flex-1" oninput="updateScenario()">' +
+            '<span class="mono text-sm w-16 text-right" id="expenseVal">0%</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    // Scenario cards + chart
+    '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">' +
+      '<div id="scenarioCards" class="grid grid-cols-2 gap-3"></div>' +
+      '<div class="card p-5">' +
+        '<div class="section-title">Savings Rate Comparison</div>' +
+        '<div style="height:220px"><canvas id="chartScenario"></canvas></div>' +
+      '</div>' +
+    '</div>' +
+
+    // Detailed breakdown table
+    '<div class="card p-5 mb-6">' +
+      '<div class="section-title">Detailed Breakdown</div>' +
+      '<div id="scenarioDetail" class="text-sm"></div>' +
+    '</div>'
+  );
+}
+
+// Interactive scenario update (called on slider input)
+function updateScenario() {
+  var incPct = parseInt(document.getElementById('incomeSlider').value);
+  var expPct = parseInt(document.getElementById('expenseSlider').value);
+
+  // Update labels
+  document.getElementById('incomeVal').textContent  = (incPct >= 0 ? '+' : '') + incPct + '%';
+  document.getElementById('expenseVal').textContent = (expPct >= 0 ? '+' : '') + expPct + '%';
+
+  // Calculate new values
+  var newInc = M.income * (1 + incPct / 100);
+  var newExp = M.expense * (1 + expPct / 100);
+  var newNet = newInc - newExp;
+  var newSR  = newInc > 0 ? (newNet / newInc) : 0;
+  var totalCicilan = M.cicilan.reduce(function (s, c) { return s + c.monthly; }, 0);
+  var newDTI = newInc > 0 ? (totalCicilan / newInc) : 0;
+
+  // Color helpers
+  var incColor = incPct >= 0 ? 'text-[#4A8C6F]' : 'text-[#C44B4B]';
+  var expColor = expPct <= 0 ? 'text-[#4A8C6F]' : 'text-[#C44B4B]';
+  var srColor  = newSR >= M.savingsRate ? 'text-[#4A8C6F]' : 'text-[#C44B4B]';
+  var dtiColor = newDTI < 0.3 ? 'text-[#4A8C6F]' : (newDTI < 0.5 ? 'text-[#D4A24E]' : 'text-[#C44B4B]');
+  var netColor = newNet >= 0 ? 'text-[#4A8C6F]' : 'text-[#C44B4B]';
+
+  // Scenario cards
+  document.getElementById('scenarioCards').innerHTML =
+    '<div class="card p-4 text-center">' +
+      '<div class="text-[10px] uppercase mb-1" style="color: var(--c-sub);">New Income</div>' +
+      '<div class="mono font-bold ' + incColor + '">Rp' + fmt(Math.round(newInc)) + '</div>' +
+    '</div>' +
+    '<div class="card p-4 text-center">' +
+      '<div class="text-[10px] uppercase mb-1" style="color: var(--c-sub);">New Expense</div>' +
+      '<div class="mono font-bold ' + expColor + '">Rp' + fmt(Math.round(newExp)) + '</div>' +
+    '</div>' +
+    '<div class="card p-4 text-center">' +
+      '<div class="text-[10px] uppercase mb-1" style="color: var(--c-sub);">New Savings Rate</div>' +
+      '<div class="mono text-lg font-bold ' + srColor + '">' + pct(newSR) + '</div>' +
+    '</div>' +
+    '<div class="card p-4 text-center">' +
+      '<div class="text-[10px] uppercase mb-1" style="color: var(--c-sub);">New DTI</div>' +
+      '<div class="mono text-lg font-bold ' + dtiColor + '">' + pct(newDTI) + '</div>' +
+    '</div>';
+
+  // Detailed table
+  var netDelta     = Math.round(newNet - M.net);
+  var netDeltaSign = netDelta >= 0 ? '+' : '';
+  var netDeltaColor = netDelta >= 0 ? 'text-[#4A8C6F]' : 'text-[#C44B4B]';
+  var srDelta     = Math.abs(newSR - M.savingsRate);
+  var srDeltaSign = newSR >= M.savingsRate ? '+' : '';
+  var srDeltaColor = newSR >= M.savingsRate ? 'text-[#4A8C6F]' : 'text-[#C44B4B]';
+  var dtiDelta    = Math.abs(newDTI - M.dti);
+  var dtiArrow    = newDTI <= M.dti ? '↓' : '↑';
+  var dtiDeltaColor = newDTI <= M.dti ? 'text-[#4A8C6F]' : 'text-[#C44B4B]';
+  var incSign = incPct >= 0 ? '+' : '';
+  var expSign = expPct >= 0 ? '+' : '';
+
+  document.getElementById('scenarioDetail').innerHTML =
+    '<table class="w-full">' +
+      '<thead>' +
+        '<tr class="border-b" style="border-color: rgba(53,88,114,0.08); font-size: 10px; color: var(--c-sub); text-transform: uppercase; letter-spacing: 0.05em;">' +
+          '<th class="p-2 text-left">Metric</th>' +
+          '<th class="p-2 text-right">Current</th>' +
+          '<th class="p-2 text-right">Scenario</th>' +
+          '<th class="p-2 text-right">Δ</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+        '<tr class="border-b" style="border-color: rgba(53,88,114,0.04);">' +
+          '<td class="p-2">Income</td>' +
+          '<td class="p-2 text-right mono">Rp' + fmt(M.income) + '</td>' +
+          '<td class="p-2 text-right mono ' + incColor + '">Rp' + fmt(Math.round(newInc)) + '</td>' +
+          '<td class="p-2 text-right mono">' + incSign + incPct + '%</td>' +
+        '</tr>' +
+        '<tr class="border-b" style="border-color: rgba(53,88,114,0.04);">' +
+          '<td class="p-2">Expense</td>' +
+          '<td class="p-2 text-right mono">Rp' + fmt(M.expense) + '</td>' +
+          '<td class="p-2 text-right mono ' + expColor + '">Rp' + fmt(Math.round(newExp)) + '</td>' +
+          '<td class="p-2 text-right mono">' + expSign + expPct + '%</td>' +
+        '</tr>' +
+        '<tr class="border-b" style="border-color: rgba(53,88,114,0.04);">' +
+          '<td class="p-2">Net Balance</td>' +
+          '<td class="p-2 text-right mono">Rp' + fmt(M.net) + '</td>' +
+          '<td class="p-2 text-right mono ' + netColor + '">Rp' + fmt(Math.abs(Math.round(newNet))) + '</td>' +
+          '<td class="p-2 text-right mono ' + netDeltaColor + '">' + netDeltaSign + fmt(netDelta) + '</td>' +
+        '</tr>' +
+        '<tr class="border-b" style="border-color: rgba(53,88,114,0.04);">' +
+          '<td class="p-2">Savings Rate</td>' +
+          '<td class="p-2 text-right mono">' + pct(M.savingsRate) + '</td>' +
+          '<td class="p-2 text-right mono font-bold ' + srColor + '">' + pct(newSR) + '</td>' +
+          '<td class="p-2 text-right mono ' + srDeltaColor + '">' + srDeltaSign + pct(srDelta) + '</td>' +
+        '</tr>' +
+        '<tr>' +
+          '<td class="p-2">DTI Ratio</td>' +
+          '<td class="p-2 text-right mono">' + pct(M.dti) + '</td>' +
+          '<td class="p-2 text-right mono">' + pct(newDTI) + '</td>' +
+          '<td class="p-2 text-right mono ' + dtiDeltaColor + '">' + dtiArrow + ' ' + pct(dtiDelta) + '</td>' +
+        '</tr>' +
+      '</tbody>' +
+    '</table>';
+
+  // Update chart
+  updateScenarioChart(newSR);
+}
+
+function initScenarioChart() {
+  var ctx = document.getElementById('chartScenario');
+  if (!ctx) return;
+
+  charts.sc = new Chart(ctx.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['Current', 'Scenario'],
+      datasets: [{
+        data: [M.savingsRate * 100, M.savingsRate * 100],
+        backgroundColor: ['#7AAACE', '#355872'],
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 60,
+          ticks: {
+            color: '#6B7D8E',
+            callback: function (v) { return v + '%'; }
+          },
+          grid: { color: 'rgba(53, 88, 114, 0.06)' }
+        },
+        x: {
+          ticks: { color: '#6B7D8E' },
+          grid: { display: false }
+        }
+      }
+    }
+  });
+}
+
+function updateScenarioChart(newSR) {
+  if (charts.sc) {
+    charts.sc.data.datasets[0].data = [M.savingsRate * 100, newSR * 100];
+    charts.sc.update();
+  }
+}
+
+// ─── CREDIT CARD ─────────────────────────────────────────────────
+function renderCreditCard() {
+  var cards = M.creditCards.map(function (c, idx) {
+    var utilization = c.limit > 0 ? (c.balance / c.limit * 100).toFixed(0) : 0;
+    var utilColor = utilization > 50 ? 'var(--c-danger)' : utilization > 30 ? 'var(--c-warning)' : 'var(--c-success)';
+    return (
+      '<div class="card p-5 mb-3">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;min-height:40px;">' +
+          '<div>' +
+            '<h3 class="font-semibold">' + c.name +
+              ' <button onclick="showEditCreditCard(' + idx + ')" style="background:none;border:none;cursor:pointer;color:var(--c-sub);font-size:11px;margin-left:4px;" title="Edit"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></h3>' +
+            '<p class="text-xs" style="color: var(--c-sub);">Limit: Rp' + fmt(c.limit) + ' · Statement: ' + c.statementDay + 'th · Due: ' + c.dueDay + 'th</p>' +
+          '</div>' +
+          '<div class="text-right flex-shrink-0">' +
+            '<div class="mono text-lg font-bold" style="color: var(--c-ink);">Rp' + fmt(c.balance) + '</div>' +
+            '<div class="text-xs" style="color:' + utilColor + ';">' + utilization + '% utilized</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="height:6px;border-radius:3px;margin-bottom:16px;background:var(--c-bg);">' +
+          '<div style="height:6px;border-radius:3px;width:' + utilization + '%;background:' + utilColor + ';"></div>' +
+        '</div>' +
+        '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">' +
+          '<div><span style="color:var(--c-sub);">Min Payment</span><br><span class="mono">Rp' + fmt(Math.max(c.minPayment, Math.round(c.balance * c.minPaymentPct / 100))) + '</span></div>' +
+          '<div><span style="color:var(--c-sub);">Interest</span><br><span class="mono">' + c.interestRate + '%/mo</span></div>' +
+          '<div><span style="color:var(--c-sub);">Annual Fee</span><br><span class="mono">Rp' + fmt(c.annualFee) + '</span></div>' +
+          '<div><span style="color:var(--c-sub);">Available</span><br><span class="mono text-[#4A8C6F]">Rp' + fmt(c.limit - c.balance) + '</span></div>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+
+  var totalBalance = M.creditCards.reduce(function (s, c) { return s + c.balance; }, 0);
+  var totalLimit   = M.creditCards.reduce(function (s, c) { return s + c.limit; }, 0);
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Credit Card</h1>' +
+    '<p class="page-subtitle">Track credit card balances, utilization, and billing cycles</p>' +
+    '<div class="grid grid-cols-3 gap-3 mb-4">' +
+      '<div class="card p-3 text-center"><div class="text-[10px] text-[#6B7D8E] uppercase">Total Balance</div><div class="mono font-bold text-[#C44B4B]">Rp' + fmt(totalBalance) + '</div></div>' +
+      '<div class="card p-3 text-center"><div class="text-[10px] text-[#6B7D8E] uppercase">Total Limit</div><div class="mono font-bold">Rp' + fmt(totalLimit) + '</div></div>' +
+      '<div class="card p-3 text-center"><div class="text-[10px] text-[#6B7D8E] uppercase">Utilization</div><div class="mono font-bold">' + (totalLimit > 0 ? (totalBalance / totalLimit * 100).toFixed(0) : 0) + '%</div></div>' +
+    '</div>' +
+    cards
+  );
+}
+
+// ─── ASSETS ──────────────────────────────────────────────────────
+function renderAssets() {
+  // Deposits
+  var depRows = M.deposits.map(function (d) {
+    var interest = d.amount * (d.rate / 100) * (d.tenor / 12);
+    var matVal   = d.amount + interest;
+    var isActive = d.status === 'active';
+    return (
+      '<div class="card p-4 mb-2">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+          '<div>' +
+            '<span class="text-sm font-medium">' + d.bank + '</span>' +
+            '<span class="text-xs ml-2" style="color: var(--c-sub);">' + d.rate + '% p.a. · ' + d.tenor + 'mo</span>' +
+          '</div>' +
+          '<div class="text-right">' +
+            '<span class="mono text-sm font-bold">Rp' + fmt(d.amount) + '</span>' +
+            '<span class="ml-2 text-xs px-1.5 py-0.5 rounded ' + (isActive ? 'text-[#4A8C6F] bg-[rgba(74,140,111,0.08)]' : 'text-[#6B7D8E] bg-[rgba(107,125,142,0.08)]') + '">' + (isActive ? 'Active' : 'Matured') + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="grid grid-cols-3 gap-2 mt-2 text-xs">' +
+          '<div><span style="color:var(--c-sub);">Interest</span><br><span class="mono text-[#4A8C6F]">Rp' + fmt(Math.round(interest)) + '</span></div>' +
+          '<div><span style="color:var(--c-sub);">Maturity Value</span><br><span class="mono">Rp' + fmt(Math.round(matVal)) + '</span></div>' +
+          '<div><span style="color:var(--c-sub);">' + (isActive ? 'Matures' : 'Matured') + '</span><br><span class="mono">' + d.maturity + '</span></div>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+  var totalDep = M.deposits.reduce(function (s, d) { return s + d.amount; }, 0);
+  var totalPorto = M.portfolios.reduce(function (s, p) { return s + p.value; }, 0);
+  var portoCards = M.portfolios.map(function (p, idx) {
+    return (
+      '<div class="card-row">' +
+        '<span class="text-sm font-medium flex-1">' + p.name + '</span>' +
+        '<span class="mono text-sm font-bold">Rp' + fmt(p.value) + '</span>' +
+        '<button onclick="showEditPortfolio(' + idx + ')" style="background:none;border:none;cursor:pointer;color:var(--c-sub);font-size:13px;" title="Edit"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>' +
+      '</div>'
+    );
+  }).join('');
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Assets</h1>' +
+    '<p class="page-subtitle">Track deposits and total asset value — update monthly</p>' +
+
+    // Deposits
+    '<div class="card p-5 mb-4">' +
+      '<div class="flex items-center justify-between mb-3">' +
+        '<div class="section-title" style="margin-bottom:0;">Deposits</div>' +
+        '<button class="btn-primary px-3 py-1.5 rounded-lg text-xs flex items-center gap-1" onclick="showAddDeposit()">' +
+          '<i data-lucide="plus" class="w-3.5 h-3.5"></i> Add' +
+        '</button>' +
+      '</div>' +
+      depRows +
+      '<div class="text-right text-xs mt-2 mono" style="color: var(--c-sub);">Total Deposits: Rp' + fmt(totalDep) + '</div>' +
+    '</div>' +
+
+    // Portfolio accounts — each tracked separately
+    '<div class="card p-5">' +
+      '<div class="flex items-center justify-between mb-3">' +
+        '<div class="section-title" style="margin-bottom:0;">Investment Accounts</div>' +
+        '<button class="btn-primary px-3 py-1.5 rounded-lg text-xs flex items-center gap-1" onclick="showAddPortfolio()">' +
+          '<i data-lucide="plus" class="w-3.5 h-3.5"></i> Add' +
+        '</button>' +
+      '</div>' +
+      portoCards +
+      '<div class="text-right text-xs mt-2 mono" style="color: var(--c-sub);">Total Portfolio: Rp' + fmt(totalPorto) + '</div>' +
+    '</div>'
+  );
+}
+
+// ─── ACCOUNT ────────────────────────────────────────────────────
+function renderAccount() {
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Account</h1>' +
+    '<p class="page-subtitle">Manage your account credentials</p>' +
+    '<div class="card p-5 mb-4 max-w-md">' +
+      '<div class="section-title">Change Password</div>' +
+      '<div class="space-y-3">' +
+        '<div>' +
+          '<label class="block text-xs mb-1" style="color: var(--c-sub);">Current Password</label>' +
+          '<input type="password" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color: var(--c-focus); background: #fff; color: var(--c-ink);" placeholder="••••••••">' +
+        '</div>' +
+        '<div>' +
+          '<label class="block text-xs mb-1" style="color: var(--c-sub);">New Password</label>' +
+          '<input type="password" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color: var(--c-focus); background: #fff; color: var(--c-ink);" placeholder="••••••••">' +
+        '</div>' +
+        '<button class="btn-primary px-4 py-2 rounded-lg text-sm">Update Password</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card p-5 max-w-md">' +
+      '<div class="section-title">Account Info</div>' +
+      '<div class="text-sm space-y-2">' +
+        '<div><span style="color: var(--c-sub);">Email:</span> kot@example.com</div>' +
+        '<div><span style="color: var(--c-sub);">Created:</span> 2026-06-01</div>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+// ─── API & AI ────────────────────────────────────────────────────
+function renderAPI() {
+  var endpoints = [
+    ['GET',    '/api/dashboard',       'Current month totals, health, budgets, cicilan'],
+    ['GET',    '/api/health',          'Savings rate, DTI, 50/30/20 breakdown'],
+    ['POST',   '/api/transactions',    'Log a new transaction'],
+    ['GET',    '/api/transactions',    'List transactions (paginated, filterable)'],
+    ['PUT',    '/api/transactions/:id','Update a transaction'],
+    ['DELETE', '/api/transactions/:id','Delete a transaction'],
+    ['GET',    '/api/cicilan',         'List all active installments'],
+    ['GET',    '/api/budgets',         'Current month budgets with progress'],
+    ['GET',    '/api/networth',        'Net worth time-series'],
+  ];
+
+  var apiRows = endpoints.map(function (e) {
+    return (
+      '<tr class="border-b" style="border-color: rgba(53,88,114,0.04);">' +
+        '<td class="p-2">' +
+          '<span class="px-1.5 py-0.5 rounded text-white font-mono" style="font-size: 10px; background: var(--c-primary);">' +
+            e[0] + '</span></td>' +
+        '<td class="p-2 mono text-xs">' + e[1] + '</td>' +
+        '<td class="p-2 text-xs" style="color: var(--c-sub);">' + e[2] + '</td></tr>'
+    );
+  }).join('');
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">API & AI</h1>' +
+    '<p class="page-subtitle">Manage API tokens and view integration docs for AI agents</p>' +
+
+    // Token section
+    '<div class="card p-5 mb-4">' +
+      '<div class="flex items-center justify-between mb-3">' +
+        '<div class="section-title" style="margin-bottom:0;">Active Tokens</div>' +
+        '<button class="btn-primary px-3 py-1.5 rounded-lg text-xs flex items-center gap-1">' +
+          '<i data-lucide="plus" class="w-3.5 h-3.5"></i> Generate' +
+        '</button>' +
+      '</div>' +
+      '<div class="overflow-x-auto">' +
+        '<table class="w-full text-sm">' +
+          '<thead><tr class="border-b" style="font-size:10px;color:var(--c-sub);text-transform:uppercase;letter-spacing:0.05em;border-color:rgba(53,88,114,0.08);">' +
+            '<th class="p-2 text-left">Label</th><th class="p-2 text-left">Prefix</th><th class="p-2 text-left">Created</th><th class="p-2 text-left">Last Used</th><th class="p-2"></th></tr></thead>' +
+          '<tbody>' +
+            '<tr><td class="p-2">hermes-agent</td><td class="p-2 mono text-xs">kote_a1b2...</td><td class="p-2 text-xs" style="color:var(--c-sub);">2026-06-15</td><td class="p-2 text-xs" style="color:var(--c-sub);">2026-06-20 14:30</td>' +
+              '<td class="p-2"><button class="text-xs hover:underline" style="color:var(--c-danger);">Revoke</button></td></tr>' +
+          '</tbody></table></div></div>' +
+
+    // API Docs section
+    '<div class="card p-5">' +
+      '<div class="section-title">Quick Start</div>' +
+      '<pre class="p-4 rounded-lg text-xs overflow-x-auto mb-4" style="background:#1e293b;color:#e2e8f0;">' +
+'export KOTECASH_TOKEN="kote_..."\n' +
+'export KOTECASH_BASE="https://kotecash.workers.dev"\n' +
+'\n' +
+'curl -H "Authorization: Bearer $KOTECASH_TOKEN" \\\n' +
+'     "$KOTECASH_BASE/api/health"</pre>' +
+      '<div class="section-title">Endpoints</div>' +
+      '<table class="w-full text-sm">' +
+        '<thead><tr class="border-b" style="font-size:10px;color:var(--c-sub);text-transform:uppercase;letter-spacing:0.05em;border-color:rgba(53,88,114,0.08);">' +
+          '<th class="p-2 text-left">Method</th><th class="p-2 text-left">Endpoint</th><th class="p-2 text-left">Description</th></tr></thead>' +
+        '<tbody>' + apiRows + '</tbody></table></div>'
+  );
+}
+
+
+// Load page from URL param or default to dashboard
+var urlParams = new URLSearchParams(window.location.search);
+var startPage = urlParams.get('page') || 'dashboard';
+navigate(startPage);
+
+
+/* =================================================================
+   REUSABLE MODAL / BOTTOM SHEET
+   ================================================================= */
+
+// Open a modal with custom title + body HTML
+function openModal(title, bodyHTML) {
+  var mask = document.createElement('div');
+  mask.className = 'modal-mask';
+  mask.onclick = function (e) { if (e.target === mask) closeModal(); };
+
+  mask.innerHTML =
+    '<div class="modal-content">' +
+      '<div class="flex items-center justify-between mb-4">' +
+        '<h2 class="text-lg font-bold" style="color: var(--c-primary);">' + title + '</h2>' +
+        '<button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--c-sub);font-size:20px;line-height:1;">&times;</button>' +
+      '</div>' +
+      bodyHTML +
+    '</div>';
+
+  document.body.appendChild(mask);
+}
+
+function closeModal() {
+  var masks = document.querySelectorAll('.modal-mask');
+  masks.forEach(function (m) { m.remove(); });
+}
+
+// Close on Escape
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ── Modal Forms ─────────────────────────────────────────────────
+
+// ─── WALLETS ────────────────────────────────────────────────────
+function toggleWalletDetail(card) {
+  var d = card.querySelector('.wallet-detail');
+  if (d) d.style.display = d.style.display === 'block' ? 'none' : 'block';
+}
+
+function renderWallets() {
+  var totalLiquid = 0;
+  M.wallets.forEach(function(w) { totalLiquid += walletBalance(w.name); });
+
+  var walletCards = M.wallets.map(function(w, idx) {
+    var bal = walletBalance(w.name);
+    var bd = (function() {
+      var ins = 0, outs = 0, exp = 0, xIn = 0, xOut = 0;
+      M.walletTxns.forEach(function(t) {
+        if (t.wallet !== w.name) return;
+        if (t.type === 'income') ins += t.amount;
+        else if (t.type === 'transfer_in') xIn += t.amount;
+        else if (t.type === 'transfer_out') xOut += t.amount;
+        else exp += t.amount;
+      });
+      return { income: ins, expense: exp, transferIn: xIn, transferOut: xOut };
+    })();
+
+    var isNeg = bal < 0;
+    var walletIcon = w.type === 'bank' ? 'building-2' : w.type === 'e-wallet' ? 'smartphone' : 'banknote';
+    var iconBg = w.type === 'bank' ? 'rgba(122,170,206,0.08)' : w.type === 'e-wallet' ? 'rgba(74,140,111,0.08)' : 'rgba(212,162,78,0.08)';
+    var iconColor = w.type === 'bank' ? 'var(--c-focus)' : w.type === 'e-wallet' ? 'var(--c-success)' : 'var(--c-warning)';
+
+    var txnRows = M.walletTxns.filter(function(t) { return t.wallet === w.name; }).slice(0, 8).map(function(t) {
+      var isIn = t.type === 'income' || t.type === 'transfer_in';
+      var icon = t.type === 'income' ? 'arrow-down-left' : t.type === 'transfer_in' ? 'arrow-right-left' : t.type === 'transfer_out' ? 'arrow-right-left' : 'shopping-cart';
+      return '<div class="flex items-center gap-2 py-1.5 text-[11px]" style="border-bottom:1px solid rgba(53,88,114,0.04);"><span class="mono flex-shrink-0" style="color:var(--c-sub);width:62px;">' + t.date.slice(5) + '</span><i data-lucide="' + icon + '" class="w-3 h-3 flex-shrink-0" style="color:' + (isIn ? 'var(--c-success)' : 'var(--c-danger)') + ';"></i><span class="flex-1 truncate" style="color:var(--c-sub);">' + (t.cat ? t.cat + ' \u00b7 ' : '') + t.desc + '</span><span class="mono font-medium flex-shrink-0 ' + (isIn ? 'text-[#4A8C6F]' : 'text-[#C44B4B]') + '">' + (isIn ? '+' : '\u2212') + 'Rp' + fmt(t.amount) + '</span></div>';
+    }).join('');
+
+    return '<div class="card p-4 mb-3" onclick="toggleWalletDetail(this)" style="cursor:pointer;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+        '<div style="display:flex;align-items:center;gap:10px;">' +
+          '<div style="width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:' + iconBg + ';">' +
+            '<i data-lucide="' + walletIcon + '" class="w-4 h-4" style="color:' + iconColor + ';"></i></div>' +
+          '<div><div class="text-sm font-semibold">' + w.name + '</div><div class="text-[10px]" style="color:var(--c-sub);">' + (w.number || w.type) + '</div></div>' +
+        '</div>' +
+        '<div class="text-right"><div class="mono text-base font-bold ' + (isNeg ? 'text-[#C44B4B]' : 'text-[#4A8C6F]') + '">Rp' + fmt(Math.abs(bal)) + '</div><div class="text-[10px]" style="color:var(--c-sub);">' + (isNeg ? 'deficit' : 'available') + '</div></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:12px;" onclick="event.stopPropagation();">' +
+        '<button class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style="background:rgba(74,140,111,0.08);color:var(--c-success);" onclick="showWalletIncome(' + idx + ')"><i data-lucide="plus" class="w-3 h-3"></i> Income</button>' +
+        '<button class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style="background:rgba(196,75,75,0.08);color:var(--c-danger);" onclick="showWalletExpense(' + idx + ')"><i data-lucide="minus" class="w-3 h-3"></i> Expense</button>' +
+        '<button class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style="background:rgba(122,170,206,0.08);color:var(--c-focus);" onclick="showTransfer()"><i data-lucide="arrow-left-right" class="w-3 h-3"></i> Transfer</button>' +
+        '<button class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style="background:rgba(53,88,114,0.04);color:var(--c-sub);" onclick="event.stopPropagation();showEditWallet(' + idx + ')"><i data-lucide="pencil" class="w-3 h-3"></i> Edit</button>' +
+      '</div>' +
+      '<div class="wallet-detail" style="display:none;margin-top:16px;padding-top:12px;border-top:1px solid var(--c-border);">' +
+        '<div class="text-[10px] font-semibold uppercase mb-2" style="color:var(--c-sub);letter-spacing:0.05em;">Reconciliation</div>' +
+        '<div class="grid grid-cols-2 gap-2 mb-3">' +
+          '<div class="flex justify-between text-[11px] px-2 py-1 rounded" style="background:rgba(74,140,111,0.04);"><span style="color:var(--c-sub);">Income</span><span class="mono text-[#4A8C6F]">+Rp' + fmt(bd.income) + '</span></div>' +
+          '<div class="flex justify-between text-[11px] px-2 py-1 rounded" style="background:rgba(74,140,111,0.04);"><span style="color:var(--c-sub);">Transfers In</span><span class="mono text-[#4A8C6F]">+Rp' + fmt(bd.transferIn) + '</span></div>' +
+          '<div class="flex justify-between text-[11px] px-2 py-1 rounded" style="background:rgba(196,75,75,0.04);"><span style="color:var(--c-sub);">Expenses</span><span class="mono text-[#C44B4B]">\u2212Rp' + fmt(bd.expense) + '</span></div>' +
+          '<div class="flex justify-between text-[11px] px-2 py-1 rounded" style="background:rgba(196,75,75,0.04);"><span style="color:var(--c-sub);">Transfers Out</span><span class="mono text-[#C44B4B]">\u2212Rp' + fmt(bd.transferOut) + '</span></div>' +
+        '</div>' +
+        '<div class="flex justify-between text-xs font-semibold px-2 py-2 rounded mb-3" style="background:rgba(53,88,114,0.04);"><span>Net Balance</span><span class="mono ' + (bal >= 0 ? 'text-[#4A8C6F]' : 'text-[#C44B4B]') + '">Rp' + fmt(Math.abs(bal)) + '</span></div>' +
+        '<div class="text-[10px] font-semibold uppercase mb-2" style="color:var(--c-sub);letter-spacing:0.05em;">Activity</div>' +
+        (txnRows || '<div class="text-xs" style="color:var(--c-sub);">No transactions yet</div>') +
+      '</div></div>';
+  }).join('');
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Wallets</h1>' +
+    '<p class="page-subtitle">Track balances \u2014 income, expenses, and transfers \u2014 all reconcilable</p>' +
+    '<div class="card p-4 mb-4" style="display:flex;align-items:center;justify-content:space-between;">' +
+      '<div><div class="text-[10px] uppercase" style="color:var(--c-sub);">Total Liquid</div><div class="mono text-lg font-bold ' + (totalLiquid >= 0 ? 'text-[#4A8C6F]' : 'text-[#C44B4B]') + '">Rp' + fmt(Math.abs(totalLiquid)) + '</div></div>' +
+      '<button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5" onclick="showTransfer()"><i data-lucide="arrow-left-right" class="w-4 h-4"></i> Transfer</button>' +
+    '</div>' +
+    walletCards
+  );
+}
+
+// ─── GOALS ──────────────────────────────────────────────────────
+function renderGoals() {
+  var totalEarmarked = M.earmarks.reduce(function(s, e) { return s + e.amount; }, 0);
+
+  var goalCards = M.goals.map(function(g, idx) {
+    var prog = goalProgress(g.name);
+    var pctD = g.target > 0 ? (prog / g.target * 100) : 0;
+    var rem = g.target - prog;
+
+    var earmarkRows = M.earmarks.filter(function(e) { return e.goal === g.name; })
+      .map(function(e) {
+        return '<div class="flex items-center justify-between text-[11px] py-1 px-2 rounded" style="background:rgba(53,88,114,0.02);"><span style="color:var(--c-sub);">' + e.source + '</span><span class="mono font-medium" style="color:var(--c-ink);">Rp' + fmt(e.amount) + '</span></div>';
+      }).join('');
+
+    return '<div class="card p-5 mb-3">' +
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">' +
+        '<div class="flex items-center gap-3">' +
+          '<div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(122,170,206,0.10);">' +
+            '<i data-lucide="' + g.icon + '" class="w-5 h-5" style="color:var(--c-focus);"></i></div>' +
+          '<div><h3 class="font-semibold">' + g.name + '</h3><p class="text-xs" style="color:var(--c-sub);">Target: Rp' + fmt(g.target) + '</p></div>' +
+        '</div>' +
+        '<div class="text-right"><div class="mono text-lg font-bold ' + (prog >= g.target ? 'text-[#4A8C6F]' : 'text-[#355872]') + '">Rp' + fmt(prog) + '</div><div class="text-[10px]" style="color:var(--c-sub);">' + pctD.toFixed(0) + '%</div></div>' +
+      '</div>' +
+      '<div style="height:8px;border-radius:4px;margin-bottom:16px;background:var(--c-bg);"><div style="height:8px;border-radius:4px;width:' + Math.min(pctD, 100) + '%;background:' + (pctD >= 100 ? 'var(--c-success)' : 'var(--c-focus)') + ';"></div></div>' +
+      '<div class="text-[10px] font-semibold uppercase mb-2" style="color:var(--c-sub);letter-spacing:0.05em;">Earmarked From</div>' +
+      (earmarkRows || '<div class="text-xs" style="color:var(--c-sub);">No allocations yet</div>') +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">' +
+        '<span class="text-xs" style="color:var(--c-sub);">' + (rem > 0 ? 'Rp' + fmt(rem) + ' remaining' : 'Goal reached!') + '</span>' +
+        '<button class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style="background:rgba(122,170,206,0.10);color:var(--c-focus);" onclick="event.stopPropagation();showAddEarmark(' + idx + ')"><i data-lucide="plus" class="w-3 h-3"></i> Allocate</button>' +
+      '</div></div>';
+  }).join('');
+
+  return (
+    '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Goals</h1>' +
+    '<p class="page-subtitle">Earmark money from wallets and assets toward your savings targets</p>' +
+    '<div class="card p-4 mb-4" style="display:flex;align-items:center;justify-content:space-between;">' +
+      '<div><div class="text-[10px] uppercase" style="color:var(--c-sub);">Total Earmarked</div><div class="mono text-lg font-bold text-[#355872]">Rp' + fmt(totalEarmarked) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">across ' + M.goals.length + ' goals</div></div>' +
+      '<button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5" onclick="showAddGoal()"><i data-lucide="plus" class="w-4 h-4"></i> New Goal</button>' +
+    '</div>' +
+    goalCards
+  );
+}
+
+// ─── MODALS ─────────────────────────────────────────────────────
+function showTransfer() {
+  openModal('Transfer',
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div class="grid grid-cols-2 gap-3"><div><label class="block text-xs mb-1" style="color:var(--c-sub);">From</label><select id="tfFrom" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);">' + M.wallets.map(function(w){return '<option>'+w.name+'</option>';}).join('') + '</select></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">To</label><select id="tfTo" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);">' + M.wallets.map(function(w){return '<option>'+w.name+'</option>';}).join('') + '</select></div></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Amount (IDR)</label><input id="tfAmount" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0"></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Notes</label><input id="tfNotes" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="Optional"></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyTransfer();closeModal();">Transfer</button></div>');
+}
+
+function applyTransfer() {
+  var from = document.getElementById('tfFrom').value;
+  var to = document.getElementById('tfTo').value;
+  var amt = parseInt(document.getElementById('tfAmount').value) || 0;
+  var notes = document.getElementById('tfNotes').value;
+  if (!amt || from === to) return;
+  M.wallets.forEach(function(w) { if (w.name === from) w.balance -= amt; if (w.name === to) w.balance += amt; });
+  var today = new Date().toISOString().slice(0, 10);
+  M.transfers.unshift({ date: today, from: from, to: to, amount: amt, notes: notes });
+  M.walletTxns.unshift({ date: today, wallet: from, type: 'transfer_out', amount: amt, target: to, desc: notes || 'Transfer to ' + to });
+  M.walletTxns.unshift({ date: today, wallet: to, type: 'transfer_in', amount: amt, source: from, desc: notes || 'Transfer from ' + from });
+  navigate('wallets');
+}
+
+function showWalletIncome(idx) {
+  var w = M.wallets[idx]; if (!w) return;
+  openModal('Add Income to ' + w.name,
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Amount</label><input id="wiAmt" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0"></div>' +
+      '<div class="grid grid-cols-2 gap-3"><div><label class="block text-xs mb-1" style="color:var(--c-sub);">Category</label><select id="wiCat" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);">' + ['Gaji M2','Freelance','Lain-lain Income'].map(function(c){return '<option>'+c+'</option>';}).join('') + '</select></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Date</label><input id="wiDate" type="date" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="2026-06-21"></div></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Notes</label><input id="wiDesc" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="Optional"></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyWalletIncome(' + idx + ');closeModal();">Add Income</button></div>');
+}
+
+function applyWalletIncome(idx) {
+  var w = M.wallets[idx];
+  var amt = parseInt(document.getElementById('wiAmt').value) || 0;
+  if (!amt) return;
+  M.walletTxns.unshift({ date: document.getElementById('wiDate').value, wallet: w.name, type: 'income', amount: amt, cat: document.getElementById('wiCat').value, desc: document.getElementById('wiDesc').value });
+  navigate('wallets');
+}
+
+function showWalletExpense(idx) {
+  var w = M.wallets[idx]; if (!w) return;
+  openModal('Spend from ' + w.name,
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Amount</label><input id="weAmt" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0"></div>' +
+      '<div class="grid grid-cols-2 gap-3"><div><label class="block text-xs mb-1" style="color:var(--c-sub);">Category</label><select id="weCat" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);">' + M.budgets.map(function(b){return '<option>'+b.cat+'</option>';}).join('') + '</select></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Date</label><input id="weDate" type="date" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="2026-06-21"></div></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Notes</label><input id="weDesc" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="What did you buy?"></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyWalletExpense(' + idx + ');closeModal();">Record Expense</button></div>');
+}
+
+function applyWalletExpense(idx) {
+  var w = M.wallets[idx];
+  var amt = parseInt(document.getElementById('weAmt').value) || 0;
+  if (!amt) return;
+  var free = typeof walletFree === 'function' ? walletFree(w.name) : w.balance;
+  if (amt > free) {
+    var into = amt - free;
+    var goals = M.earmarks.filter(function(e) { return e.source === w.name; }).map(function(e) { return e.goal; }).join(', ');
+    alert('Warning: Spending Rp' + fmt(amt) + ' exceeds free balance (Rp' + fmt(free) + '). Rp' + fmt(into) + ' will come from earmarked goals: ' + (goals || 'none') + '.');
+  }
+  M.walletTxns.unshift({ date: document.getElementById('weDate').value, wallet: w.name, type: 'expense', amount: amt, cat: document.getElementById('weCat').value, desc: document.getElementById('weDesc').value });
+  navigate('wallets');
+}
+
+function showEditWallet(idx) {
+  var w = M.wallets[idx]; if (!w) return;
+  openModal('Edit ' + w.name,
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Name</label><input id="ewName" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + w.name + '"></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Balance</label><input id="ewBal" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + w.balance + '"></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Account Number</label><input id="ewNum" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + (w.number || '') + '"></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyEditWallet(' + idx + ');closeModal();">Save</button></div>');
+}
+
+function applyEditWallet(idx) {
+  var w = M.wallets[idx];
+  w.name = document.getElementById('ewName').value || w.name;
+  w.balance = parseInt(document.getElementById('ewBal').value) || w.balance;
+  w.number = document.getElementById('ewNum').value || '';
+  navigate('wallets');
+}
+
+function showAddGoal() {
+  openModal('New Goal',
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Goal Name</label><input id="ngName" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="e.g. Sekolah Anak"></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Target (IDR)</label><input id="ngTarget" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="50000000"></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Icon</label><select id="ngIcon" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);">' + ['graduation-cap','map','shield','home','heart','briefcase','car','plane'].map(function(i){return '<option value="'+i+'">'+i+'</option>';}).join('') + '</select></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyAddGoal();closeModal();">Create Goal</button></div>');
+}
+
+function applyAddGoal() {
+  var name = document.getElementById('ngName').value;
+  var target = parseInt(document.getElementById('ngTarget').value) || 0;
+  var icon = document.getElementById('ngIcon').value;
+  if (!name || !target) return;
+  M.goals.push({ name: name, target: target, icon: icon });
+  navigate('goals');
+}
+
+function showAddEarmark(goalIdx) {
+  var g = M.goals[goalIdx]; if (!g) return;
+  var sources = [];
+  M.wallets.forEach(function(w) { sources.push(w.name); });
+  M.deposits.forEach(function(d) { sources.push(d.bank); });
+  M.portfolios.forEach(function(p) { sources.push(p.name); });
+  openModal('Allocate to ' + g.name,
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Source</label><select id="aeSource" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);">' + sources.map(function(s){return '<option>'+s+'</option>';}).join('') + '</select></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Amount (IDR)</label><input id="aeAmt" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0"></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyAddEarmark(' + goalIdx + ');closeModal();">Allocate</button></div>');
+}
+
+function applyAddEarmark(goalIdx) {
+  var g = M.goals[goalIdx];
+  var src = document.getElementById('aeSource').value;
+  var amt = parseInt(document.getElementById('aeAmt').value) || 0;
+  if (!amt) return;
+  M.earmarks.push({ goal: g.name, source: src, amount: amt });
+  navigate('goals');
+}
+
+function showAddTransaction() {
+  openModal('Add Transaction',
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Amount (IDR)</label><input id="mfAmount" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0"></div>' +
+      '<div class="grid grid-cols-2 gap-3">' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Type</label><select id="mfType" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);"><option value="expense">Expense</option><option value="income">Income</option></select></div>' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Date</label><input id="mfDate" type="date" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="2026-06-21"></div>' +
+      '</div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Category</label><select id="mfCat" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);">' +
+        ['Makan','Transport','Belanja Cash','Hiburan','Kesehatan','PAK AYAN','Listrik','Lain-lain'].map(function(c){return '<option>'+c+'</option>';}).join('') +
+      '</select></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Payment Method</label><select id="mfMethod" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);">' +
+        ['Cash','OVO','GoPay','Transfer','BCA Debit','CC BCA'].map(function(m){return '<option>'+m+'</option>';}).join('') +
+      '</select></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Notes</label><input id="mfNotes" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="Optional description"></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="closeModal()">Save Transaction</button>' +
+    '</div>'
+  );
+}
+
+function showAddCicilan() {
+  openModal('Add Cicilan',
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Name</label><input class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="e.g. KPR BCA"></div>' +
+      '<div class="grid grid-cols-2 gap-3">' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Total (IDR)</label><input type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0"></div>' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Monthly (IDR)</label><input type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0"></div>' +
+      '</div>' +
+      '<div class="grid grid-cols-2 gap-3">' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Tenor (months)</label><input type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="12"></div>' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Interest (%)</label><input type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0" step="0.1"></div>' +
+      '</div>' +
+      '<div class="grid grid-cols-2 gap-3">' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Start Date</label><input type="date" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="2026-06-01"></div>' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Due Date</label><input type="date" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="2027-06-01"></div>' +
+      '</div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="closeModal()">Save Cicilan</button>' +
+    '</div>'
+  );
+}
+
+function showSetBudget() {
+  openModal('Set Budget',
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Category</label><select class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);">' +
+        M.budgets.map(function(b){return '<option>'+b.cat+'</option>';}).join('') +
+      '</select></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Monthly Budget (IDR)</label><input type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0"></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Month</label><input type="month" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="2026-06"></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="closeModal()">Save Budget</button>' +
+    '</div>'
+  );
+}
+
+function showAddCategory() {
+  openModal('Add Category',
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Category Name</label><input class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="e.g. Groceries"></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Type</label><select class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);"><option>Expense</option><option>Income</option></select></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="closeModal()">Save Category</button>' +
+    '</div>'
+  );
+}
+
+function showEditCicilan(idx) {
+  var c = M.cicilan[idx];
+  if (!c) return;
+  openModal('Edit ' + c.name,
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Remaining Principal (IDR)</label><input id="ecRem" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + c.sisa + '"></div>' +
+      '<div class="grid grid-cols-2 gap-3">' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Monthly Payment (IDR)</label><input id="ecMon" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + c.monthly + '"></div>' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Interest Rate (%)</label><input id="ecInt" type="number" step="0.1" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + c.bunga + '"></div>' +
+      '</div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyEditCicilan(' + idx + ');closeModal();">Save Changes</button>' +
+    '</div>'
+  );
+}
+function applyEditCicilan(idx) {
+  var c = M.cicilan[idx];
+  c.sisa = parseInt(document.getElementById('ecRem').value) || c.sisa;
+  c.monthly = parseInt(document.getElementById('ecMon').value) || c.monthly;
+  c.bunga = parseFloat(document.getElementById('ecInt').value) || c.bunga;
+  navigate('cicilan');
+}
+
+function showEditCreditCard(idx) {
+  var c = M.creditCards[idx];
+  if (!c) return;
+  openModal('Edit ' + c.name,
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div class="grid grid-cols-2 gap-3">' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Current Balance (IDR)</label><input id="eccBal" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + c.balance + '"></div>' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Credit Limit (IDR)</label><input id="eccLim" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + c.limit + '"></div>' +
+      '</div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Interest Rate (%/month)</label><input id="eccInt" type="number" step="0.01" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + c.interestRate + '"></div>' +
+      '<div class="grid grid-cols-2 gap-3">' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Statement Day</label><input id="eccStmt" type="number" min="1" max="31" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + c.statementDay + '"></div>' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Due Day</label><input id="eccDue" type="number" min="1" max="31" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + c.dueDay + '"></div>' +
+      '</div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyEditCreditCard(' + idx + ');closeModal();">Save Changes</button>' +
+    '</div>'
+  );
+}
+function applyEditCreditCard(idx) {
+  var c = M.creditCards[idx];
+  c.balance = parseInt(document.getElementById('eccBal').value) || c.balance;
+  c.limit = parseInt(document.getElementById('eccLim').value) || c.limit;
+  c.interestRate = parseFloat(document.getElementById('eccInt').value) || c.interestRate;
+  c.statementDay = parseInt(document.getElementById('eccStmt').value) || c.statementDay;
+  c.dueDay = parseInt(document.getElementById('eccDue').value) || c.dueDay;
+  navigate('creditcard');
+}
+
+function showAddDeposit() {
+  openModal('Add Deposit',
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Bank</label><input id="adBank" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="e.g. BCA"></div>' +
+      '<div class="grid grid-cols-2 gap-3">' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Amount (IDR)</label><input id="adAmt" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0"></div>' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Rate (% p.a.)</label><input id="adRate" type="number" step="0.1" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="4.5"></div>' +
+      '</div>' +
+      '<div class="grid grid-cols-2 gap-3">' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Tenor (months)</label><input id="adTenor" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="6"></div>' +
+        '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Start Date</label><input id="adStart" type="date" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="2026-07-01"></div>' +
+      '</div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyAddDeposit();closeModal();">Save Deposit</button>' +
+    '</div>'
+  );
+}
+function applyAddDeposit() {
+  var bank = document.getElementById('adBank').value;
+  var amt = parseInt(document.getElementById('adAmt').value) || 0;
+  var rate = parseFloat(document.getElementById('adRate').value) || 0;
+  var tenor = parseInt(document.getElementById('adTenor').value) || 0;
+  var start = document.getElementById('adStart').value;
+  if (!bank || !amt) return;
+  var mat = new Date(start);
+  mat.setMonth(mat.getMonth() + tenor);
+  var matStr = mat.toISOString().slice(0, 7);
+  M.deposits.push({ bank: bank, amount: amt, rate: rate, tenor: tenor, start: start, maturity: matStr, status: 'active' });
+  navigate('assets');
+}
+
+function showEditPortfolio(idx) {
+  var p = M.portfolios[idx];
+  if (!p) return;
+  openModal('Edit ' + p.name,
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Account Name</label><input id="epName" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + p.name + '"></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Current Value (IDR)</label><input id="epVal" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + p.value + '"></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyEditPortfolio(' + idx + ');closeModal();">Save</button>' +
+    '</div>'
+  );
+}
+function applyEditPortfolio(idx) {
+  var p = M.portfolios[idx];
+  p.name = document.getElementById('epName').value || p.name;
+  p.value = parseInt(document.getElementById('epVal').value) || p.value;
+  navigate('assets');
+}
+
+function showAddPortfolio() {
+  openModal('Add Investment Account',
+    '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Account Name</label><input id="apName" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="e.g. RDN Mirae"></div>' +
+      '<div><label class="block text-xs mb-1" style="color:var(--c-sub);">Current Value (IDR)</label><input id="apVal" type="number" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" placeholder="0"></div>' +
+      '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="applyAddPortfolio();closeModal();">Save</button>' +
+    '</div>'
+  );
+}
+function applyAddPortfolio() {
+  var name = document.getElementById('apName').value;
+  var val = parseInt(document.getElementById('apVal').value) || 0;
+  if (!name) return;
+  M.portfolios.push({ name: name, value: val });
+  navigate('assets');
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --c-bg:       #F7F8F0;   /* Off-White Cream — main background */
+  --c-surface:  #EDF0E8;   /* Cool Ivory — sidebar background */
+  --c-card:     #FFFFFF;   /* Pure white — individual card rows, modals */
+  --c-primary:  #355872;   /* Steel Navy — CTAs, headings, active nav */
+  --c-focus:    #7AAACE;   /* Atlantic Blue — input borders, chart fills */
+  --c-accent:   #9CD5FF;   /* Sky Blue — secondary indicators */
+  --c-success:  #4A8C6F;   /* Sea Green — income, UNDER badges */
+  --c-danger:   #C44B4B;   /* Muted Crimson — expense, OVER badges */
+  --c-warning:  #D4A24E;   /* Golden Sand — warning/approaching */
+  --c-ink:      #355872;   /* Deep Navy — body text */
+  --c-sub:      #6B7D8E;   /* Slate Gray — labels, placeholders */
+  --c-border:   rgba(53, 88, 114, 0.06);  /* Subtle borders */
+  --radius:     10px;      /* Card border radius */
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--c-bg);
+  color: var(--c-ink);
+  min-height: 100vh;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(53, 88, 114, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(53, 88, 114, 0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+main {
+  position: relative;
+  z-index: 1;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* Component Patterns */
+.card {
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+}
+
+.card-row {
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+  transition: box-shadow 0.15s;
+}
+
+.card-row:hover {
+  box-shadow: 0 1px 4px rgba(53, 88, 114, 0.05);
+}
+
+.btn-primary {
+  background: var(--c-primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+.btn-primary:hover {
+  background: #2A4A63;
+}
+
+.badge-under {
+  color: var(--c-success);
+  background: rgba(74, 140, 111, 0.08);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge-over {
+  color: var(--c-danger);
+  background: rgba(196, 75, 75, 0.08);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge-track {
+  color: var(--c-focus);
+  background: rgba(122, 170, 206, 0.10);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.health-tag {
+  background: rgba(53, 88, 114, 0.04);
+  border-radius: 8px;
+  padding: 10px 14px;
+  text-align: center;
+}
+
+.page-subtitle {
+  font-size: 13px;
+  color: var(--c-sub);
+  margin-top: -4px;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-sub);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+/* Sidebar layout and transition */
+.sidebar {
+  background: var(--c-surface);
+  transition: width 0.2s ease;
+}
+
+#sidebar {
+  width: 240px;
+}
+
+.sidebar-collapsed #sidebar {
+  width: 56px;
+}
+
+/* Hide text labels when collapsed */
+.sidebar-collapsed .nav-label,
+.sidebar-collapsed .nav-section-label,
+.sidebar-collapsed .brand-text,
+.sidebar-collapsed .collapse-hint {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  display: none !important;
+}
+
+/* Toggle icon display based on collapse state */
+.sidebar-collapsed .icon-close {
+  display: none !important;
+}
+.sidebar-collapsed .icon-open {
+  display: inline-block !important;
+}
+html:not(.sidebar-collapsed) .icon-close {
+  display: inline-block !important;
+}
+html:not(.sidebar-collapsed) .icon-open {
+  display: none !important;
+}
+
+/* Main Content Area */
+#main-content {
+  transition: margin-left 0.2s ease;
+}
+
+@media (min-width: 769px) {
+  #main-content {
+    margin-left: 240px;
+  }
+  .sidebar-collapsed #main-content {
+    margin-left: 56px;
+  }
+}
+
+@media (max-width: 768px) {
+  #main-content {
+    margin-left: 0 !important;
+  }
+  /* Allow dense horizontal rows to wrap instead of overflowing */
+  .card-row {
+    flex-wrap: wrap;
+  }
+  /* Code blocks wrap on mobile instead of horizontal-scrolling off-screen */
+  pre.code-block {
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+}
+
+/* What-If sandbox cards — distinct tint so they read as simulated, not real */
+.scenario-card {
+  background: rgba(122, 90, 168, 0.06);
+  border: 1px solid rgba(122, 90, 168, 0.15);
+}
+
+/* Prevent number/value cells from being clipped by a too-near edge */
+.val-nowrap { white-space: nowrap; }
+
+
+/* ── Modal / Bottom Sheet ── */
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 100;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.modal-content {
+  background: var(--c-card); width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto;
+  padding: 20px; animation: slideUp 0.2s ease;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (min-width: 769px) {
+  .modal-mask { align-items: center; }
+  .modal-content { border-radius: 12px; margin: 16px; max-height: 80vh; }
+}
+@media (max-width: 768px) {
+  .modal-content { border-radius: 16px 16px 0 0; }
+}
+
+/* ledger row relative for dropdown */
+.ledger-row { position: relative; }
+
+/* rounded-custom helper */
+.rounded-custom { border-radius: var(--radius); }

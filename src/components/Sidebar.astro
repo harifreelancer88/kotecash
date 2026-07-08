@@ -1,0 +1,122 @@
+---
+import {
+  LayoutDashboard,
+  ScrollText,
+  BarChart3,
+  Tags,
+  Wallet,
+  CreditCard,
+  LineChart,
+  Calculator,
+  Key,
+  Target,
+  Briefcase,
+  Landmark,
+  RefreshCw,
+  User,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen
+} from 'lucide-astro';
+
+const url = new URL(Astro.request.url);
+const current = url.searchParams.get('page') || 'dashboard';
+
+const sections = [
+  {
+    label: 'CORE',
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'ledger', label: 'Ledger', icon: ScrollText },
+      { id: 'stats', label: 'Statistics', icon: BarChart3 },
+    ]
+  },
+  {
+    label: 'MANAGE',
+    items: [
+      { id: 'categories', label: 'Categories', icon: Tags },
+      { id: 'budgets', label: 'Budgets', icon: Wallet },
+      { id: 'creditcard', label: 'Credit Card', icon: CreditCard },
+      { id: 'wallets', label: 'Wallets', icon: Wallet },
+      { id: 'cicilan', label: 'Cicilan', icon: Landmark },
+      { id: 'recurring', label: 'Recurring', icon: RefreshCw },
+    ]
+  },
+  {
+    label: 'ANALYZE',
+    items: [
+      { id: 'networth', label: 'Net Worth', icon: LineChart },
+      { id: 'scenarios', label: 'What-If', icon: Calculator },
+      { id: 'goals', label: 'Goals', icon: Target },
+      { id: 'assets', label: 'Assets', icon: Briefcase },
+    ]
+  },
+  {
+    label: 'SETTINGS',
+    items: [
+      { id: 'account', label: 'Account', icon: User },
+      { id: 'api', label: 'API & AI', icon: Key },
+    ]
+  }
+];
+
+const isActive = (id: string) => current === id;
+---
+
+<aside id="sidebar" class="fixed left-0 top-0 bottom-0 z-40 hidden md:flex flex-col sidebar border-r border-[var(--c-border)]">
+  <div class="flex items-center justify-between px-3 py-4 min-h-[56px] flex-shrink-0">
+    <span class="brand-text text-lg font-bold select-none text-[var(--c-primary)]">
+      KoteCash
+    </span>
+    <button id="sidebar-toggle"
+            class="toggle-btn p-1 flex items-center justify-center text-[var(--c-sub)] hover:text-[var(--c-primary)] focus:outline-none"
+            aria-label="Toggle Sidebar">
+      <span class="icon-close"><PanelLeftClose class="w-4 h-4" /></span>
+      <span class="icon-open"><PanelLeftOpen class="w-4 h-4" /></span>
+    </button>
+  </div>
+
+  <nav class="flex-1 px-1 overflow-y-auto overflow-x-hidden space-y-4">
+    {sections.map(section => (
+      <div>
+        <div class="nav-section-label px-3 text-[10px] font-bold tracking-wider text-[var(--c-sub)] uppercase">
+          {section.label}
+        </div>
+        <div class="space-y-0.5 mt-1">
+          {section.items.map(item => {
+            const Icon = item.icon;
+            const active = isActive(item.id);
+            return (
+              <a href={`/?page=${item.id}`}
+                 class={`nav-item flex items-center gap-3 px-3 py-2.5 mx-1 rounded-custom transition-all duration-150 whitespace-nowrap text-sm ${active ? 'active text-[var(--c-primary)] bg-[rgba(53,88,114,0.08)] font-semibold' : 'text-[var(--c-sub)] hover:text-[var(--c-primary)] hover:bg-[rgba(53,88,114,0.05)]'}`}
+                 data-page={item.id}>
+                <Icon class="w-4 h-4 flex-shrink-0" />
+                <span class="nav-label">{item.label}</span>
+              </a>
+            );
+          })}
+        </div>
+      </div>
+    ))}
+  </nav>
+
+  <div class="px-1 py-2 border-t border-[var(--c-border)] flex-shrink-0">
+    <button id="logout-btn"
+       class="nav-item w-full flex items-center gap-3 px-3 py-2.5 mx-1 rounded-custom text-sm text-[var(--c-sub)] hover:text-[var(--c-danger)] hover:bg-[rgba(196,75,75,0.05)] transition-all duration-150 whitespace-nowrap">
+      <LogOut class="w-4 h-4 flex-shrink-0" />
+      <span class="nav-label">Logout</span>
+    </button>
+  </div>
+
+  <div class="collapse-hint px-4 pb-4 pt-1 text-[10px] text-[var(--c-sub)] select-none flex-shrink-0">
+    v3.0 &mdash; production
+  </div>
+</aside>
+
+<script>
+  const toggleBtn = document.getElementById('sidebar-toggle');
+  toggleBtn?.addEventListener('click', () => {
+    const isCollapsed = document.documentElement.classList.toggle('sidebar-collapsed');
+    localStorage.setItem('sidebar-collapsed', isCollapsed ? 'true' : 'false');
+  });
+</script>

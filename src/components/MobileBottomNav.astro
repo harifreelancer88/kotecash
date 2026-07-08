@@ -1,0 +1,123 @@
+---
+import {
+  LayoutDashboard,
+  ScrollText,
+  BarChart3,
+  CreditCard,
+  Ellipsis,
+  Tags,
+  Wallet,
+  LineChart,
+  Calculator,
+  Key,
+  Target,
+  RefreshCw
+} from 'lucide-astro';
+
+const url = new URL(Astro.request.url);
+const current = url.searchParams.get('page') || 'dashboard';
+
+const mainItems = [
+  { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+  { id: 'ledger', label: 'Ledger', icon: ScrollText },
+  { id: 'stats', label: 'Stats', icon: BarChart3 },
+  { id: 'cicilan', label: 'Debt', icon: CreditCard },
+];
+
+const moreItems = [
+  { id: 'categories', label: 'Categories', icon: Tags },
+  { id: 'budgets', label: 'Budgets', icon: Wallet },
+  { id: 'wallets', label: 'Wallets', icon: Wallet },
+  { id: 'networth', label: 'Net Worth', icon: LineChart },
+  { id: 'scenarios', label: 'What-If', icon: Calculator },
+  { id: 'goals', label: 'Goals', icon: Target },
+  { id: 'assets', label: 'Assets', icon: Tags },
+  { id: 'creditcard', label: 'Cards', icon: CreditCard },
+  { id: 'recurring', label: 'Recurring', icon: RefreshCw },
+  { id: 'account', label: 'Account', icon: Tags },
+  { id: 'api', label: 'API & AI', icon: Key },
+];
+
+const isActive = (id: string) => current === id;
+const isMoreActive = !mainItems.some(item => isActive(item.id));
+---
+
+<nav class="mobile-nav flex md:hidden fixed bottom-0 left-0 right-0 h-14 bg-[var(--c-surface)] border-t border-[var(--c-border)] z-50 justify-around items-center px-2">
+  {mainItems.map(item => {
+    const Icon = item.icon;
+    const active = isActive(item.id);
+    return (
+      <a href={`/?page=${item.id}`}
+         class={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] transition-all duration-150 ${active ? 'text-[var(--c-primary)] font-semibold' : 'text-[var(--c-sub)]'}`}
+         data-page={item.id}>
+        <Icon class="w-5 h-5 mb-0.5" />
+        <span>{item.label}</span>
+      </a>
+    );
+  })}
+
+  <button id="mobile-more-btn"
+          class={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] transition-all duration-150 outline-none ${isMoreActive ? 'text-[var(--c-primary)] font-semibold' : 'text-[var(--c-sub)]'}`}>
+    <Ellipsis class="w-5 h-5 mb-0.5" />
+    <span>More</span>
+  </button>
+</nav>
+
+<!-- Mobile More Overlay Menu -->
+<div id="mobile-more-overlay" class="hidden fixed inset-0 bg-black/30 z-40 transition-opacity duration-200">
+  <div class="absolute bottom-14 left-0 right-0 bg-[var(--c-surface)] border-t border-[var(--c-border)] p-4 grid grid-cols-4 gap-4 animate-slide-up shadow-lg">
+    {moreItems.map(item => {
+      const Icon = item.icon;
+      const active = isActive(item.id);
+      return (
+        <a href={`/?page=${item.id}`}
+           class={`flex flex-col items-center justify-center p-2 rounded-custom transition-colors ${active ? 'text-[var(--c-primary)] bg-[rgba(53,88,114,0.08)] font-semibold' : 'text-[var(--c-sub)] hover:bg-[rgba(53,88,114,0.05)]'}`}>
+          <Icon class="w-5 h-5 mb-1" />
+          <span class="text-[10px] text-center">{item.label}</span>
+        </a>
+      );
+    })}
+  </div>
+</div>
+
+<style>
+  @keyframes slide-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  .animate-slide-up {
+    animation: slide-up 0.2s ease-out;
+  }
+</style>
+
+<script>
+  const moreBtn = document.getElementById('mobile-more-btn');
+  const overlay = document.getElementById('mobile-more-overlay');
+
+  const toggleOverlay = () => {
+    overlay?.classList.toggle('hidden');
+  };
+
+  moreBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleOverlay();
+  });
+
+  // Close overlay when clicking outside the menu content
+  overlay?.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.classList.add('hidden');
+    }
+  });
+
+  // Close overlay on escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay && !overlay.classList.contains('hidden')) {
+      overlay.classList.add('hidden');
+    }
+  });
+</script>

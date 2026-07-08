@@ -1,0 +1,15 @@
+node_modules/
+.astro/
+dist/
+.wrangler/
+.env
+.dev.vars
+.DS_Store
+
+# private dev notes & process docs
+.memory/
+docs/superpowers/
+backups/
+
+# build artifacts
+*.tsbuildinfo

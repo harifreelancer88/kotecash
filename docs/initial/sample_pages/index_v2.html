@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>kotecash — Mockup v3</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root {
+    --c-bg: #F7F8F0; --c-surface: #EDF0E8; --c-card: #FFFFFF;
+    --c-primary: #355872; --c-focus: #7AAACE; --c-accent: #9CD5FF;
+    --c-success: #4A8C6F; --c-danger: #C44B4B; --c-warning: #D4A24E;
+    --c-ink: #355872; --c-sub: #6B7D8E; --c-border: rgba(53,88,114,0.06);
+    --radius: 10px;
+  }
+  body { background: var(--c-bg); color: var(--c-ink); font-family: 'Inter', system-ui, sans-serif; }
+  /* Grid pattern */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(53,88,114,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(53,88,114,0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+  main { position: relative; z-index: 1; }
+
+  .sidebar { background: var(--c-surface); border-right: 1px solid var(--c-border); transition: width .2s ease; overflow: hidden; }
+  .sidebar.expanded { width: 240px; }
+  .sidebar.collapsed { width: 56px; }
+  .sidebar .nav-label, .sidebar .nav-section-label, .sidebar .brand-text { transition: opacity .15s; }
+  .sidebar.collapsed .nav-label, .sidebar.collapsed .nav-section-label, .sidebar.collapsed .brand-text, .sidebar.collapsed .collapse-hint { opacity: 0; width: 0; display: none; }
+
+  .card { background: var(--c-card); border: 1px solid var(--c-border); border-radius: var(--radius); }
+  .card-row { background: var(--c-card); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 12px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 6px; transition: box-shadow .15s; }
+  .card-row:hover { box-shadow: 0 1px 4px rgba(53,88,114,0.05); }
+
+  .nav-item {
+    color: var(--c-sub); transition: all .15s; white-space: nowrap; border-radius: var(--radius);
+    padding: 10px 12px; margin: 1px 4px;
+  }
+  .nav-item:hover { color: var(--c-primary); background: rgba(53,88,114,0.05); }
+  .nav-item.active { color: var(--c-primary); background: rgba(53,88,114,0.08); font-weight: 600; }
+  .nav-section-label { font-size: 10px; font-weight: 700; color: var(--c-sub); letter-spacing: 0.06em; padding: 16px 12px 6px; }
+  .btn-primary { background: var(--c-primary); color: #fff; border: none; cursor: pointer; border-radius: var(--radius); font-weight: 600; }
+  .btn-primary:hover { background: #2A4A63; }
+  .badge-under { color: var(--c-success); background: rgba(74,140,111,0.08); border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+  .badge-over { color: var(--c-danger); background: rgba(196,75,75,0.08); border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+  .badge-track { color: var(--c-focus); background: rgba(122,170,206,0.1); border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+  .health-tag { background: rgba(53,88,114,0.04); border-radius: 8px; padding: 10px 14px; text-align: center; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .page { display: none; }
+  .page.active { display: block; }
+  .mobile-nav { display: none; }
+  .toggle-btn { cursor: pointer; transition: transform .2s; }
+  .sidebar.collapsed .toggle-btn { transform: rotate(180deg); }
+  @media (max-width: 768px) {
+    .sidebar { display: none !important; }
+    .mobile-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: var(--c-surface); border-top: 1px solid var(--c-border); z-index: 50; justify-content: space-around; padding: 6px 0; }
+    .main-content { margin-left: 0 !important; padding-bottom: 72px; }
+    .card-row { flex-wrap: wrap; }
+  }
+  input[type=range] { accent-color: var(--c-primary); }
+  canvas { max-width: 100%; }
+  .page-subtitle { font-size: 13px; color: var(--c-sub); margin-top: -4px; margin-bottom: 20px; }
+  .section-title { font-size: 11px; font-weight: 700; color: var(--c-sub); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<!-- Mobile Bottom Nav -->
+<nav class="mobile-nav" id="mobileNav"></nav>
+
+<div class="flex min-h-screen">
+  <!-- Sidebar -->
+  <aside class="sidebar expanded fixed left-0 top-0 bottom-0 z-40 flex flex-col" id="sidebar">
+    <div class="flex items-center justify-between px-3 py-4">
+      <span class="brand-text text-lg font-bold text-[#355872]">📒 kotecash</span>
+      <button onclick="toggleSidebar()" class="toggle-btn text-[#6B7D8E] hover:text-[#355872] p-1">
+        <i data-lucide="panel-left-close" class="w-4 h-4" id="toggleIcon"></i>
+      </button>
+    </div>
+    <nav id="sidebarNav" class="flex flex-col flex-1 px-1 overflow-y-auto"></nav>
+    <div class="collapse-hint text-[10px] text-[#6B7D8E] px-3 pb-4">v0.3 mockup</div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main-content flex-1 transition-all duration-200 p-5 md:p-8" id="mainContent" style="margin-left:240px">
+    <div id="pageContent"></div>
+  </main>
+</div>
+
+<script>
+let sidebarExpanded = true, currentPage = 'dashboard', charts = {};
+
+function toggleSidebar() {
+  sidebarExpanded = !sidebarExpanded;
+  const sb = document.getElementById('sidebar'), mc = document.getElementById('mainContent'), icon = document.getElementById('toggleIcon');
+  sb.classList.toggle('expanded', sidebarExpanded); sb.classList.toggle('collapsed', !sidebarExpanded);
+  mc.style.marginLeft = sidebarExpanded ? '240px' : '56px';
+  icon.setAttribute('data-lucide', sidebarExpanded ? 'panel-left-close' : 'panel-left-open');
+  lucide.createIcons();
+}
+
+// Navigation with sections
+const navSections = [
+  {
+    label: 'CORE',
+    items: [
+      { id:'dashboard', label:'Dashboard', icon:'layout-dashboard' },
+      { id:'ledger', label:'Ledger', icon:'scroll-text' },
+      { id:'stats', label:'Statistics', icon:'bar-chart-3' },
+    ]
+  },
+  {
+    label: 'MANAGE',
+    items: [
+      { id:'categories', label:'Categories', icon:'tags' },
+      { id:'budgets', label:'Budgets', icon:'wallet' },
+      { id:'cicilan', label:'Cicilan', icon:'credit-card' },
+    ]
+  },
+  {
+    label: 'ANALYZE',
+    items: [
+      { id:'networth', label:'Net Worth', icon:'line-chart' },
+      { id:'scenarios', label:'What-If', icon:'calculator' },
+    ]
+  },
+  {
+    label: 'TOOLS',
+    items: [
+      { id:'tokens', label:'API Tokens', icon:'key' },
+      { id:'share', label:'Share', icon:'share-2' },
+      { id:'ai', label:'AI Docs', icon:'bot' },
+    ]
+  },
+];
+
+function buildNav(target, mobile) {
+  let html = '';
+  if (!mobile) {
+    navSections.forEach(sec => {
+      html += `<div class="nav-section-label">${sec.label}</div>`;
+      sec.items.forEach((p, i) => {
+        html += `<a href="#" onclick="navigate('${p.id}');return false" class="nav-item flex items-center gap-3 ${i===0 && sec.label==='CORE'?'active':''}" data-page="${p.id}"><i data-lucide="${p.icon}" class="w-4 h-4 flex-shrink-0"></i><span class="nav-label text-sm">${p.label}</span></a>`;
+      });
+    });
+  } else {
+    navSections.forEach(sec => sec.items.forEach(p => {
+      html += `<a href="#" onclick="navigate('${p.id}');return false" class="nav-item flex flex-col items-center gap-0.5 px-1 py-1 rounded-lg text-[10px] text-[#6B7D8E]" data-page="${p.id}"><i data-lucide="${p.icon}" class="w-4 h-4"></i><span class="nav-label">${p.label.split(' ')[0]}</span></a>`;
+    }));
+  }
+  target.innerHTML = html;
+  lucide.createIcons();
+}
+buildNav(document.getElementById('sidebarNav'), false);
+buildNav(document.getElementById('mobileNav'), true);
+
+function navigate(id) {
+  Object.values(charts).forEach(c => { try { c.destroy(); } catch(e) {} });
+  charts = {}; currentPage = id;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === id));
+  document.getElementById('pageContent').innerHTML = renderPage(id);
+  lucide.createIcons();
+  setTimeout(() => { if (id==='stats') initStatsCharts(); if (id==='networth') initNetWorthChart(); if (id==='scenarios') initScenarioChart(); }, 50);
+}
+
+// Mock Data
+const M = {
+  income: 11774644, expense: 8150000, net: 3624644, savingsRate: 0.308, dti: 0.263,
+  budgets: [
+    {cat:'Makan',budget:3000000,actual:580000},{cat:'Transport',budget:1000000,actual:125000},{cat:'BRI',budget:1800000,actual:1800000},{cat:'CC TOKPED',budget:1000000,actual:0},{cat:'CC BCA',budget:300000,actual:0},{cat:'Belanja Cash',budget:4000000,actual:0},{cat:'Hiburan',budget:1000000,actual:149000},{cat:'Kesehatan',budget:500000,actual:85000},
+  ],
+  cicilan: [
+    {name:'BRI',total:50000000,sisa:32000000,monthly:1800000,tenor:24,bunga:8.5,due:'2027-01-01',status:'active'},{name:'CC TOKPED',total:5000000,sisa:5000000,monthly:1000000,tenor:5,bunga:0,due:'2026-05-01',status:'active'},{name:'CC BCA',total:1500000,sisa:1500000,monthly:300000,tenor:5,bunga:0,due:'2026-06-01',status:'active'},
+  ],
+  txns: [
+    {date:'2026-06-18',cat:'Makan',desc:'GrabFood dinner',amount:65000,method:'OVO',type:'expense'},{date:'2026-06-15',cat:'Belanja Cash',desc:'Sewa kos',amount:2000000,method:'Transfer',type:'expense'},{date:'2026-06-14',cat:'Lain-lain',desc:'Pulsa & kuota',amount:100000,method:'OVO',type:'expense'},{date:'2026-06-12',cat:'Kesehatan',desc:'Vitamin + obat',amount:85000,method:'Cash',type:'expense'},{date:'2026-06-10',cat:'Makan',desc:'Makan bareng teman',amount:120000,method:'Cash',type:'expense'},{date:'2026-06-08',cat:'Transport',desc:'Gojek meeting',amount:25000,method:'OVO',type:'expense'},{date:'2026-06-07',cat:'Hiburan',desc:'Netflix',amount:149000,method:'CC BCA',type:'expense'},{date:'2026-06-05',cat:'BRI',desc:'Cicilan BRI',amount:1800000,method:'BCA Transfer',type:'expense'},{date:'2026-06-03',cat:'Makan',desc:'Belanja Indomaret',amount:350000,method:'BCA Debit',type:'expense'},{date:'2026-06-02',cat:'Transport',desc:'Bensin Pertalite',amount:100000,method:'Cash',type:'expense'},{date:'2026-06-01',cat:'Makan',desc:'GoFood lunch',amount:45000,method:'OVO',type:'expense'},{date:'2026-05-20',cat:'Gaji M2',desc:'Gaji MAY 2026',amount:11774644,method:'Transfer',type:'income'},
+  ],
+  networth: [{month:'2026-01',assets:15000000,liabilities:60000000},{month:'2026-02',assets:15000000,liabilities:58200000},{month:'2026-03',assets:15000000,liabilities:56400000},{month:'2026-04',assets:15000000,liabilities:54600000},{month:'2026-05',assets:26774644,liabilities:52800000},{month:'2026-06',assets:26774644,liabilities:51000000}],
+};
+function fmt(n) { return n.toLocaleString('id-ID'); }
+function pct(n) { return (n*100).toFixed(1)+'%'; }
+function healthBadge(rate) { if(rate>=0.3) return ['Outstanding','bg-[#4A8C6F] text-white','award']; if(rate>=0.2) return ['Excellent','bg-[#7AAACE] text-white','star']; if(rate>=0.1) return ['Good','bg-[#D4A24E] text-white','thumbs-up']; return ['Needs Improvement','bg-[#C44B4B] text-white','alert-triangle']; }
+function budgetBadge(actual,budget) { const p = budget>0?actual/budget:0; if(p>1) return ['OVER','badge-over','alert-triangle']; if(p>0.9) return ['ON TRACK','badge-track','check-circle']; return ['UNDER','badge-under','check-circle-2']; }
+
+function renderPage(id) {
+  switch(id) {
+    case 'dashboard': return renderDashboard(); case 'ledger': return renderLedger(); case 'stats': return renderStats();
+    case 'categories': return renderCategories(); case 'budgets': return renderBudgets(); case 'cicilan': return renderCicilan();
+    case 'networth': return renderNetWorth(); case 'scenarios': return renderScenarios(); case 'tokens': return renderTokens();
+    case 'share': return renderShare(); case 'ai': return renderAI();
+  }
+}
+
+function renderDashboard() {
+  const h = healthBadge(M.savingsRate);
+  const dtiTier = M.dti<0.3?['Healthy','text-[#4A8C6F]']:M.dti<0.5?['High','text-[#D4A24E]']:['Critical','text-[#C44B4B]'];
+  return `
+    <h1 class="text-2xl font-bold text-[#355872]">Dashboard</h1>
+    <p class="page-subtitle">Overview of your personal finances and budget tracking</p>
+
+    <!-- Totals -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div class="card p-5"><div class="text-xs text-[#6B7D8E] uppercase tracking-wide mb-1">Income</div><div class="text-2xl font-bold mono text-[#4A8C6F]">Rp ${fmt(M.income)}</div></div>
+      <div class="card p-5"><div class="text-xs text-[#6B7D8E] uppercase tracking-wide mb-1">Expense</div><div class="text-2xl font-bold mono text-[#C44B4B]">Rp ${fmt(M.expense)}</div></div>
+      <div class="card p-5"><div class="text-xs text-[#6B7D8E] uppercase tracking-wide mb-1">Net Balance</div><div class="text-2xl font-bold mono ${M.net>=0?'text-[#4A8C6F]':'text-[#C44B4B]'}">Rp ${fmt(Math.abs(M.net))}</div></div>
+    </div>
+
+    <!-- Financial Health -->
+    <div class="section-title">Financial Health</div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+      <div class="health-tag"><div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${h[1]}"><i data-lucide="${h[2]}" class="w-3.5 h-3.5"></i> ${h[0]}</div><div class="text-[10px] text-[#6B7D8E] mt-1.5">Savings ${pct(M.savingsRate)}</div></div>
+      <div class="health-tag"><div class="text-lg font-bold mono ${dtiTier[1]}">${pct(M.dti)}</div><div class="text-[10px] text-[#6B7D8E]">DTI — ${dtiTier[0]}</div></div>
+      <div class="health-tag"><div class="text-lg font-bold mono ${(M.expense/M.income)>0.5?'text-[#C44B4B]':'text-[#4A8C6F]'}">${pct(M.expense/M.income)}</div><div class="text-[10px] text-[#6B7D8E]">50/30/20 Needs</div></div>
+      <div class="health-tag"><div class="text-lg font-bold mono text-[#4A8C6F]">${pct(M.savingsRate)}</div><div class="text-[10px] text-[#6B7D8E]">50/30/20 Savings</div></div>
+    </div>
+
+    <!-- Budgets -->
+    <div class="section-title">Budgets</div>
+    ${M.budgets.slice(0,5).map(b=>{
+      const pctUsed = b.budget>0?b.actual/b.budget:0; const st = budgetBadge(b.actual,b.budget);
+      return `<div class="card-row">
+        <span class="text-sm text-[#355872] font-medium w-24 flex-shrink-0">${b.cat}</span>
+        <div class="flex-1 bg-[#F7F8F0] rounded-full h-1.5 min-w-[80px]"><div class="h-1.5 rounded-full ${pctUsed>1?'bg-[#C44B4B]':'bg-[#7AAACE]'}" style="width:${Math.min(pctUsed*100,100)}%"></div></div>
+        <span class="mono text-xs text-right w-32 flex-shrink-0">Rp${fmt(b.actual)} / ${fmt(b.budget)}</span>
+        <span class="${st[1]} flex items-center gap-1 flex-shrink-0"><i data-lucide="${st[2]}" class="w-3 h-3"></i> ${st[0]}</span>
+      </div>`;
+    }).join('')}
+
+    <!-- Upcoming Cicilan -->
+    <div class="section-title mt-8">Upcoming Cicilan</div>
+    ${M.cicilan.filter(c=>c.status==='active').map(c=>`
+      <div class="card-row">
+        <i data-lucide="credit-card" class="w-4 h-4 text-[#6B7D8E] flex-shrink-0"></i>
+        <span class="text-sm text-[#355872] font-medium flex-1">${c.name}</span>
+        <span class="mono text-sm flex-shrink-0">Rp${fmt(c.monthly)}</span>
+        <span class="text-xs text-[#6B7D8E] flex-shrink-0 w-16 text-right">${c.due}</span>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderLedger() {
+  return `
+    <h1 class="text-2xl font-bold text-[#355872]">Ledger</h1>
+    <p class="page-subtitle">View and manage all your financial transactions</p>
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex flex-wrap gap-2 flex-1"><input placeholder="Search notes..." class="input input-sm bg-white border-[#7AAACE] text-sm flex-1 min-w-[150px] max-w-xs"><select class="select select-sm bg-white border-[#7AAACE] text-sm"><option>All Categories</option>${['Makan','Transport','BRI','Hiburan','Kesehatan'].map(c=>`<option>${c}</option>`).join('')}</select><select class="select select-sm bg-white border-[#7AAACE] text-sm"><option>All</option><option>Income</option><option>Expense</option></select></div>
+      <button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 flex-shrink-0 ml-3"><i data-lucide="plus" class="w-4 h-4"></i> Add</button>
+    </div>
+    ${M.txns.map((t,i)=>`
+      <div class="card-row">
+        <span class="mono text-xs w-20 flex-shrink-0 text-[#6B7D8E]">${t.date}</span>
+        <span class="text-sm w-24 flex-shrink-0">${t.cat}</span>
+        <span class="text-sm text-[#6B7D8E] flex-1 truncate">${t.desc}</span>
+        <span class="text-xs text-[#6B7D8E] w-16 flex-shrink-0">${t.method}</span>
+        <span class="mono text-sm w-36 text-right flex-shrink-0 font-medium ${t.type=='income'?'text-[#4A8C6F]':'text-[#C44B4B]'}">${t.type=='income'?'+':'-'} Rp${fmt(t.amount)}</span>
+        <div class="flex gap-1 flex-shrink-0"><button class="text-[#6B7D8E] hover:text-[#355872] p-1"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button><button class="text-[#6B7D8E] hover:text-[#C44B4B] p-1"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderStats() {
+  return `<h1 class="text-2xl font-bold text-[#355872]">Statistics</h1><p class="page-subtitle">Visualize income, expenses, and spending patterns</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div class="card p-5"><div class="section-title">Income vs Expense</div><div style="height:260px"><canvas id="chartIncomeExpense"></canvas></div></div>
+      <div class="card p-5"><div class="section-title">Spending by Category</div><div style="height:260px"><canvas id="chartPie"></canvas></div></div>
+    </div>`;
+}
+function initStatsCharts() {
+  const ctx1 = document.getElementById('chartIncomeExpense')?.getContext('2d');
+  if(ctx1) charts.bar = new Chart(ctx1,{type:'bar',data:{labels:['Jan','Feb','Mar','Apr','Mei','Jun'],datasets:[{label:'Income',data:[0,0,0,0,M.income,0],backgroundColor:'#4A8C6F',borderRadius:4},{label:'Expense',data:[8150000,8150000,8150000,8150000,8150000,8150000],backgroundColor:'#C44B4B',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#6B7D8E',font:{size:11}}}},scales:{x:{ticks:{color:'#6B7D8E',font:{size:10}},grid:{display:false}},y:{ticks:{color:'#6B7D8E',font:{size:10},callback:v=>(v/1e6).toFixed(1)+'M'},grid:{color:'rgba(53,88,114,0.06)'}}}});
+  const pieData=[{cat:'Makan',amt:580000},{cat:'BRI',amt:1800000},{cat:'Belanja Cash',amt:2000000},{cat:'Hiburan',amt:149000},{cat:'Transport',amt:125000},{cat:'Lain-lain',amt:185000},{cat:'Other',amt:3511000}];
+  const ctx2=document.getElementById('chartPie')?.getContext('2d');
+  if(ctx2) charts.pie=new Chart(ctx2,{type:'doughnut',data:{labels:pieData.map(d=>d.cat),datasets:[{data:pieData.map(d=>d.amt),backgroundColor:['#7AAACE','#355872','#4A8C6F','#9CD5FF','#D4A24E','#6B7D8E','#C44B4B']}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#6B7D8E',font:{size:10},padding:12}}}}});
+}
+
+function renderCategories() {
+  return `<h1 class="text-2xl font-bold text-[#355872]">Categories</h1><p class="page-subtitle">Manage your income and expense categories</p>
+    <div class="flex justify-end mb-4"><button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i> Add Category</button></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div class="card p-5"><div class="section-title">Expense Categories</div>
+        ${['Makan','Transport','BRI','CC TOKPED','CC BCA','Belanja Cash','PAK AYAN','BERAS','CANANG','Listrik Kampung','BPJS Ibu','Hiburan','Kesehatan','Lain-lain'].map(c=>`<div class="flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-[#F7F8F0] text-sm"><span>${c}</span><button class="text-[#6B7D8E] hover:text-[#355872] p-1"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></div>`).join('')}</div>
+      <div class="card p-5"><div class="section-title">Income Categories</div>
+        ${['Gaji M2','Freelance','Lain-lain Income'].map(c=>`<div class="flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-[#F7F8F0] text-sm"><span>${c}</span><button class="text-[#6B7D8E] hover:text-[#355872] p-1"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></div>`).join('')}</div>
+    </div>`;
+}
+
+function renderBudgets() {
+  return `<h1 class="text-2xl font-bold text-[#355872]">Budgets</h1><p class="page-subtitle">Set and track monthly spending limits per category</p>
+    <div class="flex items-center justify-between mb-4"><span class="text-sm text-[#6B7D8E]">June 2026</span><button class="btn-primary px-3 py-1.5 rounded-lg text-xs">Set Budget</button></div>
+    ${M.budgets.map(b=>{
+      const rem=b.budget-b.actual; const st=budgetBadge(b.actual,b.budget);
+      return `<div class="card-row">
+        <span class="text-sm font-medium w-28 flex-shrink-0">${b.cat}</span>
+        <span class="mono text-sm w-32 text-right flex-shrink-0">Rp${fmt(b.budget)}</span>
+        <span class="mono text-sm w-32 text-right flex-shrink-0 ${b.actual>0?'text-[#C44B4B]':'text-[#6B7D8E]'}">Rp${fmt(b.actual)}</span>
+        <span class="mono text-sm w-32 text-right flex-shrink-0 font-medium ${rem<0?'text-[#C44B4B]':'text-[#4A8C6F]'}">Rp${fmt(Math.abs(rem))}</span>
+        <span class="${st[1]} flex items-center gap-1 flex-shrink-0"><i data-lucide="${st[2]}" class="w-3 h-3"></i> ${st[0]}</span>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function renderCicilan() {
+  return `<h1 class="text-2xl font-bold text-[#355872]">Cicilan</h1><p class="page-subtitle">Track your active installments and debt payments</p>
+    <div class="flex justify-end mb-4"><button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i> Add Cicilan</button></div>
+    ${M.cicilan.map(c=>{
+      const rem=Math.ceil(c.sisa/c.monthly), pctPaid=((c.total-c.sisa)/c.total*100).toFixed(0);
+      return `<div class="card p-5 mb-3">
+        <div class="flex items-start justify-between mb-3"><div><h3 class="font-semibold">${c.name}</h3><p class="text-xs text-[#6B7D8E]">Active · ${rem} months remaining</p></div><span class="mono text-lg font-bold text-[#355872]">Rp${fmt(c.sisa)}</span></div>
+        <div class="bg-[#F7F8F0] rounded-full h-1.5 mb-4"><div class="h-1.5 rounded-full bg-[#7AAACE]" style="width:${pctPaid}%"></div></div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs"><div><span class="text-[#6B7D8E]">Monthly</span><br><span class="mono">Rp${fmt(c.monthly)}</span></div><div><span class="text-[#6B7D8E]">Interest</span><br><span class="mono">${c.bunga}%</span></div><div><span class="text-[#6B7D8E]">Due Date</span><br><span class="mono">${c.due}</span></div><div><span class="text-[#6B7D8E]">Total</span><br><span class="mono">Rp${fmt(c.total)}</span></div></div></div>`;
+    }).join('')}
+  `;
+}
+
+function renderNetWorth() {
+  const last=M.networth[M.networth.length-1], prev=M.networth[M.networth.length-2], nw=last.assets-last.liabilities, delta=nw-(prev.assets-prev.liabilities);
+  return `<h1 class="text-2xl font-bold text-[#355872]">Net Worth</h1><p class="page-subtitle">Track your assets, liabilities, and wealth over time</p>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="card p-5"><div class="text-xs text-[#6B7D8E] uppercase mb-1">Assets</div><div class="text-xl font-bold mono text-[#4A8C6F]">Rp${fmt(last.assets)}</div></div>
+      <div class="card p-5"><div class="text-xs text-[#6B7D8E] uppercase mb-1">Liabilities</div><div class="text-xl font-bold mono text-[#C44B4B]">Rp${fmt(last.liabilities)}</div></div>
+      <div class="card p-5"><div class="text-xs text-[#6B7D8E] uppercase mb-1">Net Worth</div><div class="text-xl font-bold mono ${nw>=0?'text-[#4A8C6F]':'text-[#C44B4B]'}">Rp${fmt(Math.abs(nw))} <span class="text-sm ${delta>=0?'text-[#4A8C6F]':'text-[#C44B4B]'}">${delta>=0?'+':''}${fmt(delta)}</span></div></div></div>
+    <div class="card p-5"><div class="section-title">Trend</div><div style="height:280px"><canvas id="chartNetWorth"></canvas></div></div>`;
+}
+function initNetWorthChart() {
+  const ctx=document.getElementById('chartNetWorth')?.getContext('2d'); if(!ctx) return;
+  const nwData=M.networth.map(n=>({month:n.month.slice(5),assets:n.assets,liabilities:n.liabilities,net:n.assets-n.liabilities}));
+  charts.nw=new Chart(ctx,{type:'line',data:{labels:nwData.map(d=>d.month),datasets:[{label:'Assets',data:nwData.map(d=>d.assets),borderColor:'#4A8C6F',backgroundColor:'rgba(74,140,111,0.05)',fill:true,tension:0.3,pointRadius:4},{label:'Liabilities',data:nwData.map(d=>d.liabilities),borderColor:'#C44B4B',backgroundColor:'rgba(196,75,75,0.05)',fill:true,tension:0.3,pointRadius:4},{label:'Net Worth',data:nwData.map(d=>d.net),borderColor:'#7AAACE',borderWidth:2,tension:0.3,pointRadius:4,pointBackgroundColor:'#355872'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#6B7D8E',font:{size:11}}}},scales:{x:{ticks:{color:'#6B7D8E',font:{size:10}},grid:{display:false}},y:{ticks:{color:'#6B7D8E',font:{size:10},callback:v=>(v/1e6).toFixed(0)+'M'},grid:{color:'rgba(53,88,114,0.06)'}}}});
+}
+
+function renderScenarios() {
+  return `<h1 class="text-2xl font-bold text-[#355872]">What-If Simulator</h1><p class="page-subtitle">Model income and expense changes to see impact on your financial health</p>
+    <div class="card p-5 mb-6">
+      <div class="section-title">Adjust Parameters</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div><label class="block text-xs text-[#6B7D8E] mb-2">Income Change (%)</label><div class="flex items-center gap-3"><input type="range" id="incomeSlider" min="-50" max="100" value="0" step="5" class="flex-1" oninput="updateScenario()"><span class="mono text-sm w-16 text-right" id="incomeVal">0%</span></div></div>
+        <div><label class="block text-xs text-[#6B7D8E] mb-2">Expense Change (%)</label><div class="flex items-center gap-3"><input type="range" id="expenseSlider" min="-50" max="100" value="0" step="5" class="flex-1" oninput="updateScenario()"><span class="mono text-sm w-16 text-right" id="expenseVal">0%</span></div></div>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div id="scenarioCards" class="grid grid-cols-2 gap-3"></div>
+      <div class="card p-5"><div class="section-title">Savings Rate Comparison</div><div style="height:220px"><canvas id="chartScenario"></canvas></div></div>
+    </div>
+    <div class="card p-5 mb-6"><div class="section-title">Detailed Breakdown</div><div id="scenarioDetail" class="text-sm"></div></div>`;
+}
+
+function updateScenario() {
+  const incPct=parseInt(document.getElementById('incomeSlider').value), expPct=parseInt(document.getElementById('expenseSlider').value);
+  document.getElementById('incomeVal').textContent=(incPct>=0?'+':'')+incPct+'%'; document.getElementById('expenseVal').textContent=(expPct>=0?'+':'')+expPct+'%';
+  const newInc=M.income*(1+incPct/100), newExp=M.expense*(1+expPct/100), newNet=newInc-newExp, newSR=newInc>0?(newNet/newInc):0;
+  const newDTI=newInc>0?(M.cicilan.reduce((s,c)=>s+c.monthly,0)/newInc):0;
+  document.getElementById('scenarioCards').innerHTML=`<div class="card p-4 text-center"><div class="text-[10px] text-[#6B7D8E] uppercase mb-1">New Income</div><div class="mono font-bold ${incPct>=0?'text-[#4A8C6F]':'text-[#C44B4B]'}">Rp${fmt(Math.round(newInc))}</div></div><div class="card p-4 text-center"><div class="text-[10px] text-[#6B7D8E] uppercase mb-1">New Expense</div><div class="mono font-bold ${expPct<=0?'text-[#4A8C6F]':'text-[#C44B4B]'}">Rp${fmt(Math.round(newExp))}</div></div><div class="card p-4 text-center"><div class="text-[10px] text-[#6B7D8E] uppercase mb-1">New Savings Rate</div><div class="mono text-lg font-bold ${newSR>=M.savingsRate?'text-[#4A8C6F]':'text-[#C44B4B]'}">${pct(newSR)}</div></div><div class="card p-4 text-center"><div class="text-[10px] text-[#6B7D8E] uppercase mb-1">New DTI</div><div class="mono text-lg font-bold ${newDTI<.3?'text-[#4A8C6F]':newDTI<.5?'text-[#D4A24E]':'text-[#C44B4B]'}">${pct(newDTI)}</div></div>`;
+  document.getElementById('scenarioDetail').innerHTML=`<table class="w-full"><thead><tr class="text-[10px] text-[#6B7D8E] uppercase tracking-wide border-b border-[rgba(53,88,114,0.08)]"><th class="p-2 text-left">Metric</th><th class="p-2 text-right">Current</th><th class="p-2 text-right">Scenario</th><th class="p-2 text-right">Δ</th></tr></thead><tbody>
+    <tr class="border-b border-[rgba(53,88,114,0.04)]"><td class="p-2">Income</td><td class="p-2 text-right mono">Rp${fmt(M.income)}</td><td class="p-2 text-right mono ${incPct>=0?'text-[#4A8C6F]':'text-[#C44B4B]'}">Rp${fmt(Math.round(newInc))}</td><td class="p-2 text-right mono">${incPct>=0?'+':''}${incPct}%</td></tr>
+    <tr class="border-b border-[rgba(53,88,114,0.04)]"><td class="p-2">Expense</td><td class="p-2 text-right mono">Rp${fmt(M.expense)}</td><td class="p-2 text-right mono ${expPct<=0?'text-[#4A8C6F]':'text-[#C44B4B]'}">Rp${fmt(Math.round(newExp))}</td><td class="p-2 text-right mono">${expPct>=0?'+':''}${expPct}%</td></tr>
+    <tr class="border-b border-[rgba(53,88,114,0.04)]"><td class="p-2">Net Balance</td><td class="p-2 text-right mono">Rp${fmt(M.net)}</td><td class="p-2 text-right mono ${newNet>=0?'text-[#4A8C6F]':'text-[#C44B4B]'}">Rp${fmt(Math.abs(Math.round(newNet)))}</td><td class="p-2 text-right mono ${newNet>=M.net?'text-[#4A8C6F]':'text-[#C44B4B]'}">${newNet>=M.net?'+':''}${fmt(Math.round(newNet-M.net))}</td></tr>
+    <tr class="border-b border-[rgba(53,88,114,0.04)]"><td class="p-2">Savings Rate</td><td class="p-2 text-right mono">${pct(M.savingsRate)}</td><td class="p-2 text-right mono font-bold ${newSR>=M.savingsRate?'text-[#4A8C6F]':'text-[#C44B4B]'}">${pct(newSR)}</td><td class="p-2 text-right mono">${newSR>=M.savingsRate?'+':''}${pct(Math.abs(newSR-M.savingsRate))}</td></tr>
+    <tr><td class="p-2">DTI Ratio</td><td class="p-2 text-right mono">${pct(M.dti)}</td><td class="p-2 text-right mono">${pct(newDTI)}</td><td class="p-2 text-right mono ${newDTI<=M.dti?'text-[#4A8C6F]':'text-[#C44B4B]'}">${newDTI<=M.dti?'↓':'↑'} ${pct(Math.abs(newDTI-M.dti))}</td></tr></tbody></table>`;
+  updateScenarioChart(newSR);
+}
+function initScenarioChart(){const ctx=document.getElementById('chartScenario')?.getContext('2d');if(!ctx)return;charts.sc=new Chart(ctx,{type:'bar',data:{labels:['Current','Scenario'],datasets:[{data:[M.savingsRate*100,M.savingsRate*100],backgroundColor:['#7AAACE','#355872'],borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:60,ticks:{color:'#6B7D8E',callback:v=>v+'%'},grid:{color:'rgba(53,88,114,0.06)'}},x:{ticks:{color:'#6B7D8E'},grid:{display:false}}}});}
+function updateScenarioChart(newSR){if(charts.sc){charts.sc.data.datasets[0].data=[M.savingsRate*100,newSR*100];charts.sc.update();}}
+
+function renderTokens(){return`<h1 class="text-2xl font-bold text-[#355872]">API Tokens</h1><p class="page-subtitle">Manage API access tokens for AI agents and integrations</p><div class="flex justify-end mb-4"><button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i> Generate Token</button></div><div class="card p-5"><div class="section-title">Active Tokens</div><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-[10px] text-[#6B7D8E] uppercase tracking-wide border-b border-[rgba(53,88,114,0.08)]"><th class="p-2 text-left">Label</th><th class="p-2 text-left">Prefix</th><th class="p-2 text-left">Created</th><th class="p-2 text-left">Last Used</th><th class="p-2"></th></tr></thead><tbody><tr><td class="p-2">hermes-agent</td><td class="p-2 mono text-xs">kote_a1b2...</td><td class="p-2 text-xs text-[#6B7D8E]">2026-06-15</td><td class="p-2 text-xs text-[#6B7D8E]">2026-06-20 14:30</td><td class="p-2"><button class="text-[#C44B4B] text-xs hover:underline">Revoke</button></td></tr></tbody></table></div></div>`;}
+function renderShare(){return`<h1 class="text-2xl font-bold text-[#355872]">Share</h1><p class="page-subtitle">Share a read-only view with family members</p><div class="card p-5 mb-4"><div class="section-title">Generate Share Link</div><p class="text-sm text-[#6B7D8E] mb-3">Create a read-only link for your spouse to view dashboard and statistics.</p><button class="btn-primary px-4 py-2 rounded-lg text-sm">Generate Link</button></div><div class="card p-5"><div class="section-title">Active Links</div><div class="text-sm text-[#6B7D8E]">No active share links.</div></div>`;}
+function renderAI(){return`<h1 class="text-2xl font-bold text-[#355872]">AI Assistant Docs</h1><p class="page-subtitle">API reference for integrating AI agents with kotecash</p><div class="card p-5 mb-4"><pre class="bg-[#1e293b] text-[#e2e8f0] p-4 rounded-lg text-xs overflow-x-auto">export KOTEE...EN=*** KOTECASH_BASE="https://..."\ncurl -H "Authorization: Bearer *** $KOTEE...PI/health"</pre></div><div class="card p-5"><div class="section-title">Endpoints</div><table class="w-full text-sm"><thead><tr class="text-[10px] text-[#6B7D8E] uppercase tracking-wide border-b border-[rgba(53,88,114,0.08)]"><th class="p-2 text-left">Method</th><th class="p-2 text-left">Endpoint</th><th class="p-2 text-left">Description</th></tr></thead><tbody>${[['GET','/api/dashboard','Current month totals, health, budgets, cicilan'],['GET','/api/health','Savings rate, DTI, 50/30/20'],['POST','/api/transactions','Log a new transaction'],['GET','/api/transactions','List transactions (paginated)'],['GET','/api/cicilan','Active installments'],['GET','/api/budgets','Budget progress'],['GET','/api/networth','Net worth time-series']].map(([m,e,d])=>`<tr class="border-b border-[rgba(53,88,114,0.04)]"><td class="p-2"><span class="bg-[#355872] text-white px-1.5 py-0.5 rounded text-[10px] font-mono">${m}</span></td><td class="p-2 mono text-xs">${e}</td><td class="p-2 text-xs text-[#6B7D8E]">${d}</td></tr>`).join('')}</tbody></table></div>`;}
+
+navigate('dashboard');
+</script>
+</body>
+</html>
