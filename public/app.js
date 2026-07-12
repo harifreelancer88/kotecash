@@ -239,6 +239,7 @@ function renderPage(id) {
     case "goals": return renderGoals();
     case "account": return renderAccount();
     case "api": return renderAPI();
+    case "wealth-import": return window.renderWealthImport ? window.renderWealthImport() : "<p>Loading wealth import…</p>";
     default: return "<p>Page not found.</p>";
   }
 }

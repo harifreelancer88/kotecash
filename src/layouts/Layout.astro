@@ -44,5 +44,6 @@ const { title = 'KoteCash', bare = false } = Astro.props;
       </div>
     )}
     {!bare && <script is:inline src="/app.js?v=6" defer></script>}
+    {!bare && <script is:inline src="/js/wealth-import.js?v=1" defer></script>}
   </body>
 </html>

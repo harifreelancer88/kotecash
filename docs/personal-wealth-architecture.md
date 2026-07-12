@@ -833,3 +833,7 @@ Phase 2 adds backend-only investment transactions, manual/imported asset prices,
 ## Phase 3 progress note
 
 Phase 3 adds backend XIRR and performance reporting. The canonical API is `GET /api/wealth/performance`, backed by pure XIRR and performance helpers. Investment transactions remain the performance source of truth, linked movements are not double-counted, terminal current value is appended for open holdings only, manual-snapshot accounts can use balance-history terminal values, and invalid XIRR inputs return explicit status values rather than 0%.
+
+## Phase 4 progress note — generic CSV imports
+
+Phase 4 adds a backend-authoritative generic CSV import workflow for wealth accounts, assets, investment transactions, and optional prices. The workflow stores preview batches and row-level audit metadata, detects duplicate files/rows, supports explicit partial-import confirmation, and commits only after revalidation. Imported investment transactions remain separate from `movements`; CSV rows never create ordinary expenses automatically. Rollback is limited to transactions and prices created by the import batch, preserving any accounts/assets that may now be referenced elsewhere. XLSX, PDF/CAS parsing, broker-specific importers, and external price fetching remain out of scope.

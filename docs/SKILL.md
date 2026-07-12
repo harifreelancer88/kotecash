@@ -288,3 +288,29 @@ Responses include invested/returned cash flow, income, charges, current value, r
 Manual-snapshot investment accounts use the latest `balance_history` snapshot on or before `as_of` as terminal value. Precedence is: investment transactions first; linked movement only as reconciliation metadata; account-level movements only as fallback for manual-snapshot legacy accounts without investment transactions.
 
 No Wealth frontend pages exist yet; use these APIs directly.
+
+### Wealth CSV imports (Phase 4)
+
+Generic CSV import is a CSV-first, auditable workflow for wealth accounts, assets, investment transactions, and optional asset prices. XLSX, PDF/CAS parsing, broker-specific parsers, and automated market/NAV fetching are not supported yet.
+
+Critical rules:
+- Imports never create final financial records during file selection or preview.
+- Workflow is `upload/parse → map → validate → preview → explicit commit`.
+- Imports are user-scoped and do not create ordinary `movements`; `movement_id` may only link to an existing movement owned by the authenticated user.
+- Duplicate files and duplicate rows are detected before commit. Partial import requires explicit confirmation.
+- Row-level errors are shown without hiding valid rows.
+- Rollback deletes only transactions/prices created by the batch; created accounts/assets are preserved.
+
+Limits:
+- CSV only, UTF-8, comma-delimited, quoted fields and quoted line breaks supported.
+- Maximum file size: 2 MB. Maximum data rows: 2,000. Maximum columns: 60. Maximum cell length: 10,000 characters.
+
+Standard columns:
+`account_name, account_type, institution, asset_name, asset_type, symbol, isin, exchange, scheme_code, transaction_type, trade_date, settlement_date, quantity, unit_price, gross_amount, charges, taxes, net_amount, currency, movement_id, external_ref, notes, price_date, price, price_source`
+
+- `POST /api/wealth/imports/preview` accepts multipart form data with `file`, `mapping` JSON, and `options` JSON. It parses CSV, validates mappings, normalizes rows, resolves existing/candidate accounts/assets, detects duplicates and oversells, stores preview metadata, and returns counts plus limited row details.
+- `GET /api/wealth/imports?status=&from=&to=` lists import batches newest first.
+- `GET /api/wealth/imports/:id?page=&page_size=` returns a user-owned batch, mapping/options, paginated rows, counts, and commit/rollback eligibility.
+- `POST /api/wealth/imports/:id/commit` explicitly commits a previewed batch. Body options include `allow_partial`, `create_missing_accounts`, `create_missing_assets`, and `skip_duplicates`. Commit rechecks ownership, duplicates, movement links, and oversells, then creates investment transactions and upserts same-date prices with `import_batch_id`. Retrying is idempotent for already imported rows.
+- `POST /api/wealth/imports/:id/rollback` rolls back imported or partially imported batches by deleting only batch-created investment transactions and prices. It refuses rollback when later non-imported transactions could be invalidated. Accounts/assets are not deleted.
+- `GET /api/wealth/imports/template` downloads the standard CSV header template.
