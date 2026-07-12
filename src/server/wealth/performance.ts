@@ -1,0 +1,30 @@
+import { calculateHolding, type InvestmentTransactionInput, type PriceInput, type HoldingResult } from './formulas';
+import { calculateXirr, combineSameDateCashFlows, type XirrCashFlow } from './xirr';
+export type PerformanceWarning = string;
+export type PerformanceSummary = { scope:string; scope_id?: number|string; valuation_date:string; invested_cash_flow:number; returned_cash_flow:number; income_received:number; charges_paid:number; current_value:number|null; realised_gain:number; unrealised_gain:number|null; total_gain:number|null; absolute_return_pct:number|null; xirr:number|null; xirr_status:string; xirr_reason?:string; cash_flow_count:number; first_cash_flow_date?:string; last_cash_flow_date?:string; warnings:PerformanceWarning[]; valuation_complete:boolean; debug?: any };
+export type Tx = InvestmentTransactionInput & { movement_id?: number|null; valuation_mode?: string|null; asset_type?: any; pricing_mode?: any; account_id:number; asset_id?:number|null };
+const amt=(t:Tx)=> t.net_amount ?? t.gross_amount ?? 0;
+const buyAmt=(t:Tx)=> t.net_amount ?? (t.gross_amount ?? 0)+(t.charges??0)+(t.taxes??0);
+const sellAmt=(t:Tx)=> t.net_amount ?? Math.max(0,(t.gross_amount??0)-(t.charges??0)-(t.taxes??0));
+function costKnown(t:Tx){ return (t.net_amount??t.gross_amount??0)>0; }
+export function appendTerminalValue(flows:XirrCashFlow[], date:string, value:number|null|undefined, warnings:string[]){ if(value == null){ warnings.push('incomplete_valuation_missing_terminal_value'); return; } if(value>0) flows.push({date,amount:value,source:'terminal_value'}); }
+export function buildAssetCashFlows(transactions:Tx[], opts:{valuationDate:string; currentValue?:number|null; appendTerminal?:boolean}):{cashFlows:XirrCashFlow[]; warnings:string[]; metrics:any}{ const warnings:string[]=[]; const flows:XirrCashFlow[]=[]; const metrics={invested:0,returned:0,income:0,charges:0};
+ for(const t of transactions){ const d=t.trade_date; const type=t.transaction_type; if(['buy','sip'].includes(type)){ const a=buyAmt(t); flows.push({date:d,amount:-a,source:type,transactionId:t.id}); metrics.invested+=a; }
+ else if(['sell','redemption'].includes(type)){ const a=sellAmt(t); flows.push({date:d,amount:a,source:type,transactionId:t.id}); metrics.returned+=a; }
+ else if(['dividend','interest'].includes(type)){ const a=amt(t); flows.push({date:d,amount:a,source:type,transactionId:t.id}); metrics.income+=a; }
+ else if(type==='contribution'){ const a=amt(t); flows.push({date:d,amount:-a,source:type,transactionId:t.id}); metrics.invested+=a; }
+ else if(['withdrawal','maturity'].includes(type)){ const a=amt(t); flows.push({date:d,amount:a,source:type,transactionId:t.id}); metrics.returned+=a; }
+ else if(type==='charges'){ const a=amt(t)||(t.charges??0); flows.push({date:d,amount:-a,source:type,transactionId:t.id}); metrics.charges+=a; }
+ else if(type==='transfer_in'){ if(costKnown(t)){ const a=buyAmt(t); flows.push({date:d,amount:-a,source:type,transactionId:t.id}); metrics.invested+=a; } else warnings.push('transfer_in_missing_cost_basis'); }
+ else if(type==='transfer_out'){ if(sellAmt(t)>0){ const a=sellAmt(t); flows.push({date:d,amount:a,source:type,transactionId:t.id}); metrics.returned+=a; } else warnings.push('transfer_out_without_proceeds'); }
+ }
+ if(opts.appendTerminal) appendTerminalValue(flows,opts.valuationDate,opts.currentValue,warnings); return {cashFlows:flows,warnings,metrics}; }
+function sum(arr:any[], key:string){ return arr.reduce((s,x)=>s+(x[key]??0),0); }
+export function summarizePerformance(input:{scope:string; scopeId?:number|string; valuationDate:string; transactions:Tx[]; holding?:HoldingResult; currentValue?:number|null; childSummaries?:PerformanceSummary[]; appendTerminal?:boolean; extraWarnings?:string[]; debug?:boolean}):PerformanceSummary{ const warnings=[...(input.extraWarnings??[])]; let flows:XirrCashFlow[]=[]; let metrics={invested:0,returned:0,income:0,charges:0};
+ if(input.childSummaries?.length){ metrics={invested:sum(input.childSummaries,'invested_cash_flow'),returned:sum(input.childSummaries,'returned_cash_flow'),income:sum(input.childSummaries,'income_received'),charges:sum(input.childSummaries,'charges_paid')}; for(const s of input.childSummaries) warnings.push(...s.warnings); }
+ const built=buildAssetCashFlows(input.transactions,{valuationDate:input.valuationDate,currentValue:input.currentValue,appendTerminal:input.appendTerminal!==false}); flows=built.cashFlows; warnings.push(...built.warnings); metrics=built.metrics;
+ const x=calculateXirr(flows); const h=input.holding; const current=input.currentValue ?? h?.current_value ?? null; const realised=h?.realised_gain ?? 0; const unreal=h?.unrealised_gain ?? (current==null?null:current-(h?.remaining_cost_basis??0)); const total=h?.total_gain ?? (unreal==null?null:realised+unreal); const complete=!warnings.some(w=>w.includes('missing_price')||w.includes('incomplete_valuation')) && current!==null;
+ const summary:PerformanceSummary={scope:input.scope,scope_id:input.scopeId,valuation_date:input.valuationDate,invested_cash_flow:metrics.invested,returned_cash_flow:metrics.returned,income_received:metrics.income,charges_paid:metrics.charges,current_value:current,realised_gain:realised,unrealised_gain:unreal,total_gain:total,absolute_return_pct:metrics.invested?((total??0)/metrics.invested)*100:null,xirr:x.value,xirr_status:x.status,xirr_reason:x.reason,cash_flow_count:x.cashFlowCount,first_cash_flow_date:x.firstDate,last_cash_flow_date:x.lastDate,warnings:[...new Set([...(h?.warnings??[]),...warnings])],valuation_complete:complete};
+ if(input.debug) summary.debug={cash_flows:combineSameDateCashFlows(flows),method:x.method,iterations:x.iterations,npv:x.npv}; return summary; }
+export const buildAccountCashFlows=buildAssetCashFlows; export const buildPortfolioCashFlows=buildAssetCashFlows;
+export function holdingFor(txs:Tx[], prices:PriceInput[], asOf:string){ return calculateHolding(txs,prices,{asOf,assetType:txs[0]?.asset_type,pricingMode:txs[0]?.pricing_mode}); }
