@@ -151,6 +151,21 @@ The universal write primitive. One row per money movement.
   - `POST /api/portfolios/:id/trade` → `{ amount, wallet_id, direction ("buy"|"sell"), date, description }` (cash movement: buy = `wallet → portfolio`, sell = `portfolio → wallet`)
 - Both have `DELETE`.
 
+
+### Wealth foundation APIs (Phase 1)
+
+- **Wealth accounts**: `/api/wealth/accounts` exposes investment accounts derived from existing `portfolios`.
+  - `GET /api/wealth/accounts?active=true|false&account_type=...` returns account metadata plus `currentValue` using the same portfolio snapshot valuation logic.
+  - `POST /api/wealth/accounts` creates a portfolio-backed investment account and optional `opening_value` snapshot.
+  - `PUT /api/wealth/accounts/:id` updates account metadata and lifecycle flags.
+  - `DELETE /api/wealth/accounts/:id` soft-deactivates the account by setting `is_active=0`; it does not delete history.
+
+- **Wealth assets**: `/api/wealth/assets` manages user-scoped investment instruments.
+  - `GET /api/wealth/assets?asset_type=...&active=true|false&q=...` lists assets for the current user.
+  - `POST /api/wealth/assets` creates an asset with validated type, identifiers, currency, price source, and pricing mode.
+  - `PUT /api/wealth/assets/:id` updates editable asset metadata and `updated_at`.
+  - `DELETE /api/wealth/assets/:id` soft-deactivates the asset by setting `is_active=0`.
+
 ### Recurring payments — `POST /api/recurring`
 Templates that auto-generate movements on a schedule. Sweep runs lazily on each `/api/dashboard` load (any template with `next_run <= today` is materialized into a movement, then `next_run` advances).
 ```json

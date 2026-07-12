@@ -110,7 +110,7 @@ async function loadAll() {
 
   M.portfolios = ports.map(function (p) {
     PMAP[p.name] = p.id;
-    return { id: p.id, name: p.name, value: p.value };
+    return { id: p.id, name: p.name, value: p.currentValue ?? p.value ?? 0, currentValue: p.currentValue ?? p.value ?? 0 };
   });
 
   M.cicilan = cics.map(function (c) {

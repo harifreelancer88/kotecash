@@ -13,6 +13,8 @@ import tokens from "./routes/tokens";
 import networth from "./routes/networth";
 import { creditCards, deposits, portfolios } from "./routes/misc";
 import { categories, budgets, earmarks } from "./routes/manage";
+import wealthAccounts from "./routes/wealth-accounts";
+import wealthAssets from "./routes/wealth-assets";
 
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 
@@ -116,6 +118,8 @@ app.route("/api/net-worth", networth);
 app.route("/api/credit-cards", creditCards);
 app.route("/api/deposits", deposits);
 app.route("/api/portfolios", portfolios);
+app.route("/api/wealth/accounts", wealthAccounts);
+app.route("/api/wealth/assets", wealthAssets);
 app.route("/api/categories", categories);
 app.route("/api/budgets", budgets);
 app.route("/api/earmarks", earmarks);

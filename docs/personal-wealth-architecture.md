@@ -821,3 +821,7 @@ Explicit non-goals:
 - No tax filing, F&O, intraday, advisory, or multi-tenant features.
 - No migration of fixed deposits into investment assets.
 - No migration of `cicilan` into new liabilities yet.
+
+## Phase 1 implementation progress
+
+Phase 1 now adds portfolio-backed Wealth account metadata and user-scoped investment assets, with validation and read/write APIs. It intentionally does not implement investment transactions, holdings, prices, gain/loss, XIRR, imports, liabilities, or a Wealth dashboard UI.
