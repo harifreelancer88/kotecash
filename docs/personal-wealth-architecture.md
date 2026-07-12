@@ -837,3 +837,28 @@ Phase 3 adds backend XIRR and performance reporting. The canonical API is `GET /
 ## Phase 4 progress note — generic CSV imports
 
 Phase 4 adds a backend-authoritative generic CSV import workflow for wealth accounts, assets, investment transactions, and optional prices. The workflow stores preview batches and row-level audit metadata, detects duplicate files/rows, supports explicit partial-import confirmation, and commits only after revalidation. Imported investment transactions remain separate from `movements`; CSV rows never create ordinary expenses automatically. Rollback is limited to transactions and prices created by the import batch, preserving any accounts/assets that may now be referenced elsewhere. XLSX, PDF/CAS parsing, broker-specific importers, and external price fetching remain out of scope.
+
+## Phase 5 progress note — first Wealth management UI
+
+Phase 5 adds the first complete browser UI for the Personal Wealth module. The implementation keeps calculations backend-authoritative and uses the existing REST APIs for accounts, assets, investment transactions, prices, holdings, performance/XIRR, and CSV imports. Frontend code lives in modular files under `public/js/wealth/` rather than expanding the main SPA file.
+
+Implemented UI tabs:
+
+- Overview: portfolio summary cards, backend performance status, stale/missing price warnings, recent investment transactions, and quick actions.
+- Accounts: create, edit, deactivate, inspect holdings, and navigate to account performance for portfolio-backed investment accounts.
+- Assets: create, edit, deactivate, add prices, and navigate to asset performance for user-scoped investment assets.
+- Transactions: create, edit, delete, filter-ready investment transaction table, movement reconciliation links, transaction-type help, and readable backend validation/oversell errors.
+- Prices: add/update same-asset same-date manual prices and delete prices with valuation completeness warnings.
+- Holdings: backend-derived quantities, cost basis, current value, realised/unrealised gain, stale price and missing price states.
+- Performance: portfolio/account/asset/asset-type scopes using backend XIRR and comparison data, with asset debug details hidden behind an expandable control.
+- Import: existing CSV import flow is integrated into the Wealth sub-navigation without rewriting the backend.
+
+Wealth UI money formatting assumes the current Wealth backend money fields are integer minor units for INR (paise), so browser display divides integer amounts by 100 and formats with `en-IN`/`INR` as `₹1,23,456.78`. Decimal quantities and prices are displayed as decimals without frontend recalculation of holdings, gain/loss, FIFO, XIRR, or performance.
+
+Remaining future work intentionally not included in Phase 5:
+
+- Automated market-price fetching and mutual-fund NAV providers.
+- Monthly net-worth history integration for Wealth holdings.
+- Generalized liabilities.
+- Tax/capital-gains reports.
+- XLSX/PDF/CAS imports and parser expansion.
