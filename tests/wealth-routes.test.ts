@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 import wealthAccounts from '../src/server/routes/wealth-accounts';
 import wealthAssets from '../src/server/routes/wealth-assets';
+import wealthTransactions from '../src/server/routes/wealth-transactions';
 
 function mockDB(rowsByQuery: { match: string; rows?: any[]; first?: any; run?: any }[] = []) {
   const prepare = vi.fn((query: string) => {
@@ -79,5 +80,30 @@ describe('wealth assets routes', () => {
     expect((await h.app.request('/api/wealth/assets/3', { method: 'DELETE' }, h.env)).status).toBe(200);
     h = harness(wealthAssets, '/api/wealth/assets', mockDB([{ match: 'FROM investment_assets WHERE user_id=?', rows: [{ id: 1, name: 'Mine' }] }]));
     expect(await (await h.app.request('/api/wealth/assets?active=true&q=mi', {}, h.env)).json()).toEqual([{ id: 1, name: 'Mine' }]);
+  });
+});
+
+
+describe('wealth transaction money convention', () => {
+  it('preserves whole-unit INR integer amounts in API writes', async () => {
+    const inserted: any[][] = [];
+    const db = {
+      prepare: vi.fn((query: string) => ({
+        bind: vi.fn((...args: any[]) => ({
+          first: vi.fn(async () => {
+            if (query.includes('FROM portfolios')) return { id: 1, is_active: 1 };
+            if (query.includes('FROM investment_assets')) return { id: 2, is_active: 1 };
+            return null;
+          }),
+          all: vi.fn(async () => ({ results: [] })),
+          run: vi.fn(async () => { inserted.push(args); return { success: true, meta: { last_row_id: 9, changes: 1 } }; }),
+        })),
+      })),
+    } as unknown as D1Database;
+    const h = harness(wealthTransactions, '/api/wealth/transactions', db);
+    const res = await h.app.request('/api/wealth/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account_id: 1, asset_id: 2, transaction_type: 'buy', trade_date: '2026-07-12', quantity: '1', unit_price: '10000', gross_amount: 10000, charges: 0, taxes: 0, net_amount: 10000, external_ref: 'controlled-10000' }) }, h.env);
+    expect(res.status).toBe(201);
+    expect(inserted[0]).toContain(10000);
+    expect(inserted[0].filter((v) => v === 10000)).toHaveLength(2);
   });
 });

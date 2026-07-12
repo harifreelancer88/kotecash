@@ -1,7 +1,7 @@
 (function(g){
   function esc(v){return String(v??'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function finite(n){return Number.isFinite(Number(n));}
-  function money(v){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!Number.isFinite(n)) return '—'; return new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',minimumFractionDigits:2,maximumFractionDigits:2}).format(n/100); }
+  function money(v){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!Number.isFinite(n)) return '—'; return new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n); }
   function qty(v){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!Number.isFinite(n)) return '—'; return n.toLocaleString('en-IN',{maximumFractionDigits:8}); }
   function price(v){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!Number.isFinite(n)) return '—'; return '₹'+n.toLocaleString('en-IN',{maximumFractionDigits:8,minimumFractionDigits: n%1?2:0}); }
   function pct(v){ if(v===null||v===undefined||!Number.isFinite(Number(v))) return '—'; return (Number(v)*100).toFixed(2)+'%'; }

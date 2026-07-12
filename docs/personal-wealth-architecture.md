@@ -277,10 +277,10 @@ Calculation strategy:
 
 Rounding and precision:
 
-- Store money in integer minor units, consistent with existing IDR integer conventions.
+- Store money in integer whole currency units for compatibility with existing KoteCash integer IDR storage; INR Wealth integer amounts follow the same whole-unit convention.
 - Store quantities and unit prices as decimal strings in the database, parse with deterministic decimal helpers in TypeScript.
 - Avoid JavaScript floating point for persisted decimal math where precision matters. If no dependency is introduced, use scaled integers with asset-specific precision.
-- Recommended default precision: quantity scale 1e6, unit price scale 1e6, money integer minor units.
+- Recommended default precision: quantity scale 1e6, unit price scale 1e6, money integer whole currency units.
 - Round displayed money to whole IDR for current conventions.
 - Round displayed quantities based on asset type: stocks 0-4 decimals, mutual funds 3-6 decimals, retirement units according to provider data.
 
@@ -853,7 +853,7 @@ Implemented UI tabs:
 - Performance: portfolio/account/asset/asset-type scopes using backend XIRR and comparison data, with asset debug details hidden behind an expandable control.
 - Import: existing CSV import flow is integrated into the Wealth sub-navigation without rewriting the backend.
 
-Wealth UI money formatting assumes the current Wealth backend money fields are integer minor units for INR (paise), so browser display divides integer amounts by 100 and formats with `en-IN`/`INR` as `₹1,23,456.78`. Decimal quantities and prices are displayed as decimals without frontend recalculation of holdings, gain/loss, FIFO, XIRR, or performance.
+Wealth UI money formatting uses KoteCash's existing integer whole-currency convention. Wealth amount fields such as `gross_amount`, `charges`, `taxes`, `net_amount`, portfolio `value`, movement `amount`, and derived `current_value` are stored and returned as whole INR integer units, not paise. A controlled smoke value of `10000` is stored as `10000`, returned by the API as `10000`, and displayed as `₹10,000`; the browser must not divide these values by 100. Decimal quantities and prices are displayed as decimals without frontend recalculation of holdings, gain/loss, FIFO, XIRR, or performance.
 
 Remaining future work intentionally not included in Phase 5:
 
@@ -862,3 +862,16 @@ Remaining future work intentionally not included in Phase 5:
 - Generalized liabilities.
 - Tax/capital-gains reports.
 - XLSX/PDF/CAS imports and parser expansion.
+
+
+## Wealth authenticated smoke-test note — 2026-07-12
+
+Environment: local development/preview only, using a fresh local D1-style database with migrations `0001` through `0010` applied in order and a seeded authenticated user. No production database, remote migration, deployment, or push was performed.
+
+Tested flow: authenticated Wealth navigation for Overview, Accounts, Assets, Transactions, Prices, Holdings, Performance, Import, direct `/?page=wealth`, `wealthTab` sub-tabs, and legacy `/?page=wealth-import`; account/asset creation and editing; buy, dividend, partial sell, oversell rejection, split, price upsert/correction, holdings/performance refresh, CSV template/preview/commit/retry/rollback paths, empty/error rendering, and mobile-width layout checks.
+
+Money storage convention: KoteCash and Wealth use integer whole currency units. The verified `10000` amount convention is stored as `10000`, returned by APIs as `10000`, and displayed as `₹10,000`. This fixes the verified Phase 5 factor-of-100 UI display mismatch caused by treating Wealth amounts as INR paise.
+
+Bugs fixed: Wealth browser money formatting no longer divides integer amounts by 100, transaction amount labels now state whole INR units instead of paise, and regression coverage documents the whole-unit INR display convention.
+
+Known limitations: Wealth still has no automated prices, monthly net-worth integration, generalized liabilities migration, XLSX/PDF/CAS import, or production deployment as intentionally constrained for this phase.
