@@ -43,7 +43,18 @@ const { title = 'KoteCash', bare = false } = Astro.props;
         <MobileBottomNav />
       </div>
     )}
-    {!bare && <script is:inline src="/app.js?v=6" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/helpers.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/api.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/state.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/overview.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/accounts.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/assets.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/transactions.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/prices.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/holdings.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/performance.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/js/wealth/router.js?v=1" defer></script>}
+    {!bare && <script is:inline src="/app.js?v=7" defer></script>}
     {!bare && <script is:inline src="/js/wealth-import.js?v=1" defer></script>}
   </body>
 </html>

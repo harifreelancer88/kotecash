@@ -198,6 +198,7 @@ function navigate(id, push) {
   if (id === "scenarios") { initScenarioChart(); updateScenario(); }
   if (id === "account") loadAccountInfo();
   if (id === "api") loadTokens();
+  if (id === "wealth" && window.WealthRouter) window.WealthRouter.load();
   // update sidebar/mobile active
   document.querySelectorAll("[data-page]").forEach(function (el) {
     el.classList.toggle("active", el.getAttribute("data-page") === id);
@@ -239,6 +240,7 @@ function renderPage(id) {
     case "goals": return renderGoals();
     case "account": return renderAccount();
     case "api": return renderAPI();
+    case "wealth": return window.renderWealthApp ? window.renderWealthApp() : "<p>Loading wealth…</p>";
     case "wealth-import": return window.renderWealthImport ? window.renderWealthImport() : "<p>Loading wealth import…</p>";
     default: return "<p>Page not found.</p>";
   }
