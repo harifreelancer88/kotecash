@@ -244,3 +244,31 @@ curl -s https://your-worker.example.com/api/dashboard \
 curl -s https://your-worker.example.com/api/net-worth \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+## Personal Wealth Phase 2 APIs
+
+Investment transactions are distinct from the canonical `movements` cash-flow ledger. Buys and SIPs do not automatically create normal expenses or movements; provide `movement_id` only to link an already-existing real cash flow.
+
+### `GET /api/wealth/transactions`
+Lists investment-domain events for the authenticated user. Optional filters: `account_id`, `asset_id`, `transaction_type`, `from`, `to`, and `q`. Results include account, asset, and linked movement summary fields and are ordered by trade date descending then id descending.
+
+### `POST /api/wealth/transactions`
+Creates a transaction. Supported types are `buy`, `sell`, `sip`, `redemption`, `dividend`, `interest`, `contribution`, `withdrawal`, `transfer_in`, `transfer_out`, `bonus`, `split`, `charges`, and `maturity`. The backend validates account/asset/movement ownership, normalizes quantity and price decimals, derives unambiguous amounts, and rejects oversells. No movement is created automatically.
+
+### `PUT /api/wealth/transactions/:id`
+Updates an owned investment transaction and validates the full resulting account/asset sequence so the edit cannot create an oversold holding.
+
+### `DELETE /api/wealth/transactions/:id`
+Physically deletes an owned investment transaction for now, unless removal would invalidate a later sell/redemption/transfer-out sequence.
+
+### `GET /api/wealth/prices`
+Lists owned asset prices newest first. Optional filters: `asset_id`, `from`, `to`, and `source`.
+
+### `POST /api/wealth/prices`
+Creates or corrects a price for an owned asset/date. Fields: `asset_id`, `price_date`, `price`, `currency`, `source`, and `notes`. Prices are normalized decimal strings and upsert on `(user_id, asset_id, price_date)`. No external provider fetching is performed.
+
+### `DELETE /api/wealth/prices/:id`
+Deletes an owned price row.
+
+### `GET /api/wealth/holdings`
+Calculates backend-authoritative holdings from transactions and latest owned prices on or before `as_of`. Optional filters: `account_id`, `asset_id`, `asset_type`, `as_of`, and `include_closed=true|false`. Returns per-holding quantity, remaining FIFO cost basis, average cost, latest price, current value, realised/unrealised/total gains, absolute return percentage, stale price flag, warnings, and a summary. XIRR is not implemented yet.

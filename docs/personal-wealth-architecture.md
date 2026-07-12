@@ -825,3 +825,7 @@ Explicit non-goals:
 ## Phase 1 implementation progress
 
 Phase 1 now adds portfolio-backed Wealth account metadata and user-scoped investment assets, with validation and read/write APIs. It intentionally does not implement investment transactions, holdings, prices, gain/loss, XIRR, imports, liabilities, or a Wealth dashboard UI.
+
+## Phase 2 progress note
+
+Phase 2 adds backend-only investment transactions, manual/imported asset prices, and derived holdings APIs. Investment-domain events remain separate from `movements`; `movement_id` is an optional link only when a real cash flow already exists. FIFO holdings, cost basis, realised gain, unrealised gain, stale-price warnings, and summaries are calculated server-side from transactions and prices. XIRR, CSV/XLSX import, automated market fetching, Wealth UI pages, liabilities migration, and net-worth monthly integration remain future work.
