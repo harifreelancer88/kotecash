@@ -2,7 +2,7 @@ export const DECIMAL_SCALE = 1_000_000n;
 export type DecimalString = string;
 
 // Rounding: inputs are truncated to 6 fractional places only when extra trailing zeros are supplied.
-// Division and multiplication for money use half-up rounding to the nearest integer minor unit.
+// Division and multiplication for money use half-up rounding to the nearest integer whole currency unit.
 export function parseDecimal(value: unknown, opts: { allowZero?: boolean; allowNegative?: boolean } = {}): bigint {
   if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'bigint') throw new Error('Invalid decimal');
   const raw = String(value).trim();

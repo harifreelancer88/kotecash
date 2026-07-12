@@ -7,8 +7,9 @@ new Script(readFileSync('public/js/wealth/helpers.js', 'utf8')).runInContext(con
 const H = context.module.exports as any;
 
 describe('wealth UI helpers', () => {
-  it('formats INR minor units with en-IN grouping', () => {
-    expect(H.money(12345678)).toBe('₹1,23,456.78');
+  it('formats INR whole-unit integers with en-IN grouping', () => {
+    expect(H.money(12345678)).toBe('₹1,23,45,678');
+    expect(H.money(10000)).toBe('₹10,000');
   });
   it('formats decimal quantities safely', () => {
     expect(H.qty('12.345678901')).toBe('12.3456789');
