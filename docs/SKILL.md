@@ -272,3 +272,19 @@ Deletes an owned price row.
 
 ### `GET /api/wealth/holdings`
 Calculates backend-authoritative holdings from transactions and latest owned prices on or before `as_of`. Optional filters: `account_id`, `asset_id`, `asset_type`, `as_of`, and `include_closed=true|false`. Returns per-holding quantity, remaining FIFO cost basis, average cost, latest price, current value, realised/unrealised/total gains, absolute return percentage, stale price flag, warnings, and a summary. XIRR is not implemented yet.
+
+## Wealth performance / XIRR API (Phase 3)
+
+`GET /api/wealth/performance` is the canonical backend endpoint for reusable investment-performance reporting. It calculates XIRR on the server from `investment_transactions`; linked `movement_id` values are reconciliation metadata and are never added as duplicate cash flows.
+
+Query parameters: `scope=portfolio|account|asset|asset_type` (defaults to `portfolio`), `account_id`, `asset_id`, `asset_type`, `as_of=YYYY-MM-DD`, `include_closed=true|false`, and optional `debug=true`.
+
+Cash-flow signs use the investor perspective: buys, SIPs, contributions, standalone charges, and transfer-ins with reliable cost basis are negative; sells, redemptions, withdrawals, dividends, interest, and maturities are positive. Bonus and split transactions are not direct cash flows. Transfer-ins without cost basis are excluded and return a warning. Transfer-outs are not treated as investment returns unless proceeds are recorded.
+
+Open holdings append current value once as a terminal positive cash flow on the valuation date. Closed holdings do not receive a fake terminal value. Account and portfolio reports append the aggregate open-holding terminal value once, not both asset terminal values and an account terminal value. Missing prices make valuation incomplete instead of silently assuming zero; stale prices may warn while still computing.
+
+Responses include invested/returned cash flow, income, charges, current value, realised/unrealised/total gains, absolute return, `xirr`, `xirr_status`, optional `xirr_reason`, cash-flow dates/count, warnings, and `valuation_complete`. `xirr` can be `null` when inputs are insufficient, have no sign change, use invalid dates, or fail to converge; clients should display the status/reason rather than treating it as 0%.
+
+Manual-snapshot investment accounts use the latest `balance_history` snapshot on or before `as_of` as terminal value. Precedence is: investment transactions first; linked movement only as reconciliation metadata; account-level movements only as fallback for manual-snapshot legacy accounts without investment transactions.
+
+No Wealth frontend pages exist yet; use these APIs directly.

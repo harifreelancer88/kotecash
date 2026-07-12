@@ -829,3 +829,7 @@ Phase 1 now adds portfolio-backed Wealth account metadata and user-scoped invest
 ## Phase 2 progress note
 
 Phase 2 adds backend-only investment transactions, manual/imported asset prices, and derived holdings APIs. Investment-domain events remain separate from `movements`; `movement_id` is an optional link only when a real cash flow already exists. FIFO holdings, cost basis, realised gain, unrealised gain, stale-price warnings, and summaries are calculated server-side from transactions and prices. XIRR, CSV/XLSX import, automated market fetching, Wealth UI pages, liabilities migration, and net-worth monthly integration remain future work.
+
+## Phase 3 progress note
+
+Phase 3 adds backend XIRR and performance reporting. The canonical API is `GET /api/wealth/performance`, backed by pure XIRR and performance helpers. Investment transactions remain the performance source of truth, linked movements are not double-counted, terminal current value is appended for open holdings only, manual-snapshot accounts can use balance-history terminal values, and invalid XIRR inputs return explicit status values rather than 0%.
