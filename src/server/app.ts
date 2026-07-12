@@ -15,6 +15,9 @@ import { creditCards, deposits, portfolios } from "./routes/misc";
 import { categories, budgets, earmarks } from "./routes/manage";
 import wealthAccounts from "./routes/wealth-accounts";
 import wealthAssets from "./routes/wealth-assets";
+import wealthTransactions from "./routes/wealth-transactions";
+import wealthPrices from "./routes/wealth-prices";
+import wealthHoldings from "./routes/wealth-holdings";
 
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 
@@ -120,6 +123,9 @@ app.route("/api/deposits", deposits);
 app.route("/api/portfolios", portfolios);
 app.route("/api/wealth/accounts", wealthAccounts);
 app.route("/api/wealth/assets", wealthAssets);
+app.route("/api/wealth/transactions", wealthTransactions);
+app.route("/api/wealth/prices", wealthPrices);
+app.route("/api/wealth/holdings", wealthHoldings);
 app.route("/api/categories", categories);
 app.route("/api/budgets", budgets);
 app.route("/api/earmarks", earmarks);
