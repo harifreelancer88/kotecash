@@ -19,6 +19,7 @@ import wealthTransactions from "./routes/wealth-transactions";
 import wealthPrices from "./routes/wealth-prices";
 import wealthHoldings from "./routes/wealth-holdings";
 import wealthPerformance from "./routes/wealth-performance";
+import wealthImports from "./routes/wealth-imports";
 
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 
@@ -128,6 +129,7 @@ app.route("/api/wealth/transactions", wealthTransactions);
 app.route("/api/wealth/prices", wealthPrices);
 app.route("/api/wealth/holdings", wealthHoldings);
 app.route("/api/wealth/performance", wealthPerformance);
+app.route("/api/wealth/imports", wealthImports);
 app.route("/api/categories", categories);
 app.route("/api/budgets", budgets);
 app.route("/api/earmarks", earmarks);
