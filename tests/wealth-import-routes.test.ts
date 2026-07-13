@@ -27,6 +27,44 @@ describe('wealth import routes', () => {
     {match:'SELECT * FROM wealth_import_rows', rows:[{id:1,status:'valid',normalized_json:JSON.stringify({transaction_type:'transfer_in',unit_price:'0',gross_amount:'0',net_amount:'0'})}]},
   ])); const res=await h.app.request('/api/wealth/imports/7/commit', {method:'POST', body:JSON.stringify({}), headers:{'content-type':'application/json'}}, h.env); expect(res.status).toBe(400); expect((await res.json() as any).error).toContain('explicit override'); });
   it('rejects duplicate file preview', async () => { const h=harness(mockDB([{match:'SELECT id,status FROM wealth_import_batches', first:{id:1,status:'imported'}}])); const fd=new FormData(); fd.append('file', new File(['account_name\nA\n'], 'a.csv', {type:'text/csv'})); fd.append('mapping', '{}'); const res=await h.app.request('/api/wealth/imports/preview', {method:'POST', body:fd}, h.env); expect(res.status).toBe(409); });
+  it('deletes a previewed uncommitted batch without touching finance records or movements', async () => {
+    const db=mockDB([
+      {match:'SELECT * FROM wealth_import_batches', first:{id:10,user_id:1,status:'previewed',imported_rows:0}},
+      {match:'created_transaction_id IS NOT NULL', first:{count:0}},
+      {match:'FROM investment_transactions WHERE user_id=? AND import_batch_id=?', first:{count:0}},
+      {match:'FROM investment_prices WHERE user_id=? AND import_batch_id=?', first:{count:0}},
+      {match:'SELECT COUNT(*) count FROM wealth_import_rows WHERE user_id=? AND batch_id=?', first:{count:56}},
+      {match:'DELETE FROM wealth_import_rows', run:{success:true,meta:{changes:56}}},
+      {match:'DELETE FROM wealth_import_batches', run:{success:true,meta:{changes:1}}},
+    ]);
+    const h=harness(db);
+    const res=await h.app.request('/api/wealth/imports/10',{method:'DELETE'},h.env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({deleted:true,deleted_rows:56});
+    const sql=(db.prepare as any).mock.calls.map((c:any)=>c[0]).join('\n');
+    expect(sql).toMatch(/DELETE FROM wealth_import_rows/);
+    expect(sql).toMatch(/DELETE FROM wealth_import_batches/);
+    expect(sql).not.toMatch(/DELETE FROM investment_transactions|DELETE FROM investment_prices|DELETE FROM movements/i);
+  });
+  it.each(['imported','partially_imported','rolled_back'])('rejects deleting %s batches', async (status) => {
+    const h=harness(mockDB([{match:'SELECT * FROM wealth_import_batches', first:{id:10,user_id:1,status,imported_rows:status==='imported'?56:13}}]));
+    const res=await h.app.request('/api/wealth/imports/10',{method:'DELETE'},h.env);
+    expect(res.status).toBe(400);
+  });
+  it('rejects deleting uncommitted batches with created financial records', async () => {
+    const h=harness(mockDB([
+      {match:'SELECT * FROM wealth_import_batches', first:{id:10,user_id:1,status:'previewed',imported_rows:0}},
+      {match:'created_transaction_id IS NOT NULL', first:{count:1}},
+    ]));
+    const res=await h.app.request('/api/wealth/imports/10',{method:'DELETE'},h.env);
+    expect(res.status).toBe(400);
+    expect((await res.json() as any).error).toContain('created financial records');
+  });
+  it('returns not found when another user deletes the batch', async () => {
+    const h=harness(mockDB([{match:'SELECT * FROM wealth_import_batches', first:null}]));
+    const res=await h.app.request('/api/wealth/imports/10',{method:'DELETE'},h.env);
+    expect(res.status).toBe(404);
+  });
 });
 
 describe('wealth import commit eligibility regression', () => {

@@ -39,6 +39,18 @@ describe('wealth import history/details UI helpers', () => {
     expect(html).not.toContain('Opening cost basis missing');
     expect(html).toContain('data-cm="7" >Commit</button>');
   });
+  it('shows Delete only for safely deletable batches', () => {
+    const WI = loadWI();
+    expect(WI.canDeleteBatch({ status: 'previewed', imported_rows: 0, can_delete: 1 })).toBe(true);
+    expect(WI.canDeleteBatch({ status: 'previewed', imported_rows: 0, can_delete: 0 })).toBe(false);
+    expect(WI.canDeleteBatch({ status: 'imported', imported_rows: 56, can_delete: 0 })).toBe(false);
+    const deletable = WI.summary({ batch: { id: 10, status: 'previewed', total_rows: 56, imported_rows: 0, can_delete: 1 }, can_commit: true, rows: [], row_total: 56 });
+    expect(deletable).toContain('Delete eligible');
+    expect(deletable).toContain('data-del="10"');
+    expect(deletable).toContain('>Delete</button>');
+    const imported = WI.summary({ batch: { id: 11, status: 'imported', total_rows: 56, imported_rows: 56, can_delete: 0 }, can_commit: false, rows: [], row_total: 56 });
+    expect(imported).not.toContain('data-del="11"');
+  });
   it('pagination controls reflect row totals', () => {
     const html = loadWI().rowsTable({ batch: { id: 7, total_rows: 60 }, rows: [openingRow('1')], row_total: 60 });
     expect(html).toContain('Page 1 of 3');
