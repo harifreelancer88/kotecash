@@ -10,3 +10,22 @@ describe('wealth import helpers', () => {
   it('rejects invalid money', () => expect(()=>normalizeImportRow({Amt:'12.3',Type:'buy'}, {Amt:'gross_amount',Type:'transaction_type'})).toThrow(/gross_amount/));
   it('creates deterministic fingerprints', async () => { const n={transaction_type:'buy',trade_date:'2026-01-01',quantity:'1',unit_price:'2',gross_amount:2,charges:0,taxes:0,net_amount:2}; const a={id:1}; const s={id:2}; await expect(fingerprint(1,n,a,s)).resolves.toBe(await fingerprint(1,n,a,s)); });
 });
+
+import { resolveAsset } from '../src/server/wealth/imports';
+
+describe('wealth asset resolver order', () => {
+  function ctx(rows:any[]) { return { env:{ DB:{ prepare:(query:string)=>({ bind:(...binds:any[])=>({ all:async()=>({results:rows.filter(r => query.includes(r.match)).map(r=>r.row)}), first:async()=>null, run:async()=>({success:true,meta:{}}) }) }) } } } as any; }
+  it('resolves by ISIN before other identifiers', async () => {
+    const asset={id:1,name:'By ISIN',asset_type:'stock'};
+    await expect(resolveAsset(ctx([{match:'isin=?',row:asset}]),1,{isin:'INE002A01018',symbol:'OTHER',exchange:'NSE',asset_type:'stock',asset_name:'Other',currency:'INR'})).resolves.toMatchObject({id:1,name:'By ISIN'});
+  });
+  it('resolves by symbol/exchange/type', async () => {
+    const asset={id:2,name:'By Symbol',asset_type:'stock'};
+    await expect(resolveAsset(ctx([{match:'symbol=? AND exchange=? AND asset_type=?',row:asset}]),1,{symbol:'RELIANCE',exchange:'NSE',asset_type:'stock',asset_name:'Reliance',currency:'INR'})).resolves.toMatchObject({id:2,name:'By Symbol'});
+  });
+  it('resolves by exact name/type and creates candidates when unresolved', async () => {
+    const asset={id:3,name:'Exact Name',asset_type:'stock'};
+    await expect(resolveAsset(ctx([{match:'lower(name)=lower(?)',row:asset}]),1,{asset_name:'Exact Name',asset_type:'stock',currency:'INR'})).resolves.toMatchObject({id:3,name:'Exact Name'});
+    await expect(resolveAsset(ctx([]),1,{asset_name:'NewCo',symbol:'NEWCO',exchange:'NSE',asset_type:'stock',currency:'INR'})).resolves.toMatchObject({candidate:{name:'NewCo',symbol:'NEWCO',exchange:'NSE',asset_type:'stock'}});
+  });
+});

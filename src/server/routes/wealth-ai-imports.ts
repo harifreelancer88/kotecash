@@ -131,6 +131,26 @@ function presentExtraction(r: any) {
     usage_json: undefined,
   };
 }
+
+function roundWholeInr(quantity: any, price: any) {
+  const q = Number(String(quantity ?? '').replace(/,/g, ''));
+  const p = Number(String(price ?? '').replace(/,/g, ''));
+  if (!Number.isFinite(q) || !Number.isFinite(p)) return null;
+  return Math.round(q * p);
+}
+function wholeInr(value: any) {
+  if (value == null || value === '') return null;
+  const n = Number(String(value).replace(/,/g, ''));
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n);
+}
+function firstPresent(...values: any[]) {
+  return values.find((v) => v != null && v !== '');
+}
+function assetTypeOf(h: any) {
+  return String(h.asset_type || h.type || 'stock').toLowerCase().replace(/[ -]/g, '_');
+}
+
 function validation(j: any) {
   const warnings: string[] = [];
   const date = /^\d{4}-\d{2}-\d{2}$/;
@@ -338,31 +358,55 @@ route.post("/:id/prepare", async (c) => {
       );
     const ex = JSON.parse(rec.extracted_json || "{}");
     const doc = ex.document || {};
+    const selectedAccountId = req.account_id ? Number(req.account_id) : null;
+    let selectedAccount: any = null;
+    if (selectedAccountId) {
+      selectedAccount = await c.env.DB.prepare(
+        `SELECT id,name,account_type FROM portfolios WHERE id=? AND user_id=? AND is_active=1`,
+      )
+        .bind(selectedAccountId, uid)
+        .first<any>();
+      if (!selectedAccount) return c.json(bad("Invalid default account"), 400);
+    }
     const cutover = req.cutover_date || doc.statement_date || "2026-04-01";
+    const openingDate = new Date(
+      new Date(cutover + "T00:00:00Z").getTime() - 86400000,
+    )
+      .toISOString()
+      .slice(0, 10);
     const rows: any[] = [];
     if (doc.document_type === "holdings_statement") {
-      for (const h of ex.holdings || [])
+      for (const h of ex.holdings || []) {
+        const averageCost = firstPresent(
+          h.average_cost,
+          h.average_acquisition_cost,
+          h.acquisition_cost,
+          h.unit_price,
+        );
+        const totalCost = wholeInr(firstPresent(h.total_cost, h.cost_basis, h.opening_cost_basis));
+        const derivedCost = totalCost ?? roundWholeInr(h.quantity, averageCost);
         rows.push({
-          account_name: req.account_name,
-          asset_name: h.asset_name || h.symbol,
-          asset_type: "stock",
+          account_name: selectedAccount?.name || req.account_name,
+          asset_name: h.asset_name || h.name || h.symbol || h.isin,
+          asset_type: assetTypeOf(h),
           symbol: h.symbol,
           isin: h.isin,
           exchange: h.exchange,
           transaction_type: "transfer_in",
-          trade_date: new Date(
-            new Date(cutover + "T00:00:00Z").getTime() - 86400000,
-          )
-            .toISOString()
-            .slice(0, 10),
+          trade_date: openingDate,
           quantity: h.quantity,
-          unit_price: h.average_cost,
-          gross_amount: h.total_cost,
-          net_amount: h.total_cost,
+          unit_price: averageCost,
+          gross_amount: derivedCost,
+          net_amount: derivedCost,
+          charges: 0,
+          taxes: 0,
           currency: "INR",
-          external_ref: `ai:${id}:${h.isin || h.symbol}`,
-          notes: "Opening holding proposed from OpenAI extraction",
+          external_ref: `ai:${id}:${h.isin || h.symbol || h.asset_name}`,
+          notes: derivedCost == null
+            ? "Opening holding proposed from OpenAI extraction; missing_cost_basis"
+            : "Opening holding proposed from OpenAI extraction",
         });
+      }
     } else {
       for (const t of ex.transactions || [])
         rows.push({
@@ -398,7 +442,7 @@ route.post("/:id/prepare", async (c) => {
         "{}",
         JSON.stringify({
           openai_extraction_id: id,
-          default_account_id: req.account_id,
+          default_account_id: selectedAccountId,
           default_currency: "INR",
         }),
         rows.length,
@@ -420,11 +464,11 @@ route.post("/:id/prepare", async (c) => {
         n = normalizeImportRow(
           rows[i],
           Object.fromEntries(Object.keys(rows[i]).map((k) => [k, k])),
-          { default_account_id: req.account_id, default_currency: "INR" },
+          { default_account_id: selectedAccountId, default_currency: "INR" },
         );
         n = n.normalized;
         acc = await resolveAccount(c as any, uid, n, {
-          default_account_id: req.account_id,
+          default_account_id: selectedAccountId,
         });
         asset = await resolveAsset(c as any, uid, n);
         fp = await fingerprint(uid, n, acc, asset);
@@ -453,7 +497,7 @@ route.post("/:id/prepare", async (c) => {
           status,
           status === "invalid" ? "validation_error" : null,
           err,
-          "[]",
+          JSON.stringify(n?.notes?.includes("missing_cost_basis") ? ["missing_cost_basis"] : []),
         )
         .run();
       if (preview.length < 100)
