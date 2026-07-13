@@ -358,15 +358,20 @@ route.post("/:id/prepare", async (c) => {
       );
     const ex = JSON.parse(rec.extracted_json || "{}");
     const doc = ex.document || {};
-    const selectedAccountId = req.account_id ? Number(req.account_id) : null;
+    const selectedAccountId = req.account_id != null && req.account_id !== '' ? Number(req.account_id) : null;
+    if (req.account_id != null && req.account_id !== '' && (!Number.isInteger(selectedAccountId) || selectedAccountId <= 0))
+      return c.json(bad("Invalid account_id"), 400);
+    if (doc.document_type === "holdings_statement" && !selectedAccountId)
+      return c.json(bad("Select a target Wealth account before preparing the import."), 400);
     let selectedAccount: any = null;
     if (selectedAccountId) {
       selectedAccount = await c.env.DB.prepare(
-        `SELECT id,name,account_type FROM portfolios WHERE id=? AND user_id=? AND is_active=1`,
+        `SELECT id,name,account_type,is_active FROM portfolios WHERE id=? AND user_id=?`,
       )
         .bind(selectedAccountId, uid)
         .first<any>();
-      if (!selectedAccount) return c.json(bad("Invalid default account"), 400);
+      if (!selectedAccount) return c.json(bad("Invalid account_id"), 400);
+      if (selectedAccount.is_active === 0) return c.json(bad("Selected account is inactive"), 400);
     }
     const cutover = req.cutover_date || doc.statement_date || "2026-04-01";
     const openingDate = new Date(
@@ -386,6 +391,7 @@ route.post("/:id/prepare", async (c) => {
         const totalCost = wholeInr(firstPresent(h.total_cost, h.cost_basis, h.opening_cost_basis));
         const derivedCost = totalCost ?? roundWholeInr(h.quantity, averageCost);
         rows.push({
+          account_id: selectedAccountId,
           account_name: selectedAccount?.name || req.account_name,
           asset_name: h.asset_name || h.name || h.symbol || h.isin,
           asset_type: assetTypeOf(h),
@@ -410,7 +416,8 @@ route.post("/:id/prepare", async (c) => {
     } else {
       for (const t of ex.transactions || [])
         rows.push({
-          account_name: req.account_name,
+          account_id: selectedAccountId,
+          account_name: selectedAccount?.name || req.account_name,
           asset_name: t.asset_name || t.symbol,
           asset_type: "stock",
           symbol: t.symbol,
