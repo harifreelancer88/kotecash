@@ -1,0 +1,6 @@
+import { describe, expect, it, vi } from 'vitest';
+import dashboard from '../src/server/routes/dashboard';
+import { Hono } from 'hono';
+function app(db:any){ const a=new Hono<{Variables:{userId:number}}>(); a.use('*',async(c,n)=>{c.set('userId',1); await n();}); a.route('/api',dashboard); return {app:a, env:{DB:db}}; }
+function db(){return {prepare:vi.fn((q:string)=>({bind:vi.fn(()=>({all:vi.fn(async()=>({results:q.includes('FROM portfolios')?[{id:1,name:'Broker',account_type:'brokerage',is_active:1,include_in_net_worth:1,valuation_mode:'holdings',value:0}]:q.includes('FROM investment_transactions')?[{id:1,account_id:1,asset_id:1,transaction_type:'buy',trade_date:'2026-01-01',quantity:'1',gross_amount:100,asset_type:'stock',pricing_mode:'manual'}]:q.includes('FROM investment_prices')?[{asset_id:1,price_date:'2026-07-01',price:'150'}]:[] })),run:vi.fn(async()=>({success:true}))}))}))};}
+describe('dashboard wealth integration',()=>{it('returns wealth fields and includes investments in assets',async()=>{const h=app(db()); const r=await h.app.request('/api/dashboard?month=2026-07',{},h.env as any); const j:any=await r.json(); expect(j.wealthInvestmentValue).toBe(150); expect(j.totalAssets).toBe(150); expect(j.assetBreakdown.stocks).toBe(150);});});

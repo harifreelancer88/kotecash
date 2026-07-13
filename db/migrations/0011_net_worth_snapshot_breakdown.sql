@@ -1,0 +1,10 @@
+ALTER TABLE net_worth_snapshots ADD COLUMN breakdown_json TEXT;
+ALTER TABLE net_worth_snapshots ADD COLUMN source TEXT NOT NULL DEFAULT 'auto';
+ALTER TABLE net_worth_snapshots ADD COLUMN locked INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE net_worth_snapshots ADD COLUMN calculated_at TEXT;
+ALTER TABLE net_worth_snapshots ADD COLUMN warnings_json TEXT;
+ALTER TABLE net_worth_snapshots ADD COLUMN valuation_complete INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE net_worth_snapshots ADD COLUMN notes TEXT;
+CREATE INDEX IF NOT EXISTS idx_net_worth_snapshots_user_month ON net_worth_snapshots (user_id, month);
+CREATE INDEX IF NOT EXISTS idx_net_worth_snapshots_user_locked ON net_worth_snapshots (user_id, locked);
+CREATE INDEX IF NOT EXISTS idx_net_worth_snapshots_user_source ON net_worth_snapshots (user_id, source);

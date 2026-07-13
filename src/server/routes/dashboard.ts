@@ -1,14 +1,13 @@
 import { Hono } from "hono";
 import type { AppContext, Bindings, Variables } from "../types";
 import { currentMonth } from "../types";
+import { getWealthAggregation } from "../wealth/valuation";
 import {
   savingsRate,
   dtiRatio,
   accountBalance,
-  portfolioValue,
   pnl,
   type Movement,
-  type Snapshot,
   type Earmark,
 } from "../formulas";
 
@@ -50,22 +49,20 @@ app.get("/dashboard", async (c: AppContext) => {
     }
   } catch (e) { /* sweep is best-effort; never block the dashboard */ }
 
-  const [wallets, cc, deposits, portfolios, cicilan, mvRes, snapRes, earmarks] = await Promise.all([
+  const asOf = `${month}-31`;
+  const [wallets, cc, deposits, wealth, cicilan, mvRes, earmarks] = await Promise.all([
     c.env.DB.prepare("SELECT id, initial_balance FROM wallets WHERE user_id = ?").bind(uid)
       .all<{ id: number; initial_balance: number }>(),
     c.env.DB.prepare("SELECT id, balance FROM credit_cards WHERE user_id = ?").bind(uid)
       .all<{ id: number; balance: number }>(),
     c.env.DB.prepare("SELECT id, amount FROM deposits WHERE user_id = ? AND status = 'active'").bind(uid)
       .all<{ id: number; amount: number }>(),
-    c.env.DB.prepare("SELECT id FROM portfolios WHERE user_id = ?").bind(uid).all<{ id: number }>(),
+    getWealthAggregation(c.env.DB, uid, asOf),
     c.env.DB.prepare("SELECT id, total_utang, monthly_payment FROM cicilan WHERE user_id = ? AND status = 'active'")
       .bind(uid).all<{ id: number; total_utang: number; monthly_payment: number }>(),
     c.env.DB.prepare(
       "SELECT src_kind, src_id, dst_kind, dst_id, amount, date, category_id FROM movements WHERE user_id = ?"
     ).bind(uid).all<Movement>(),
-    c.env.DB.prepare(
-      "SELECT entity_kind, entity_id, amount, recorded_at FROM balance_history WHERE user_id = ? AND entity_kind='portfolio'"
-    ).bind(uid).all<Snapshot>(),
     c.env.DB.prepare("SELECT source_type, source_id, goal_id, amount FROM earmarks WHERE user_id = ?")
       .bind(uid).all<Earmark>(),
   ]);
@@ -84,10 +81,9 @@ app.get("/dashboard", async (c: AppContext) => {
 
   const totalDeposits = deposits.results.reduce(
     (s, d) => s + accountBalance('deposit', d.id, d.amount, mv), 0);
-  const totalPortfolios = portfolios.results.reduce(
-    (s, p) => s + portfolioValue(p.id, snapRes.results, mv), 0);
-  const totalAssets = totalDeposits + totalPortfolios;
-  const netWorth = totalLiquid + totalAssets - totalCC - totalCicilanSisa;
+  const totalPortfolios = wealth.total;
+  const totalAssets = totalLiquid + totalDeposits + wealth.total;
+  const netWorth = totalAssets - totalCC - totalCicilanSisa;
 
   const totalEarmarked = earmarks.results.reduce((s, e) => s + e.amount, 0);
   const walletEarmarked = earmarks.results
@@ -112,6 +108,13 @@ app.get("/dashboard", async (c: AppContext) => {
     totalDeposits,
     totalPortfolios,
     totalAssets,
+    wealthInvestmentValue: wealth.total,
+    wealthHoldingsValue: wealth.holdings_value,
+    wealthManualSnapshotValue: wealth.manual_snapshot_value,
+    wealthValuationComplete: wealth.valuation_complete,
+    wealthWarnings: wealth.warnings,
+    excludedWealthInvestmentValue: wealth.excluded_value,
+    assetBreakdown: { wallets: totalLiquid, deposits: totalDeposits, ...wealth.assetBreakdown },
     totalCicilanSisa,
     netWorth,
     savingsRate: sr,
