@@ -44,3 +44,59 @@ describe('wealth import commit eligibility regression', () => {
     {match:'SELECT * FROM wealth_import_rows', rows:[{id:1,status:'valid',normalized_json:JSON.stringify({transaction_type:'transfer_in',unit_price:'10',gross_amount:10,net_amount:10,account:{id:9},asset:{candidate:{name:'NewCo',asset_type:'stock',symbol:'NEWCO'}}})}]},
   ])); const res=await h.app.request('/api/wealth/imports/8/commit',{method:'POST',headers:{'content-type':'application/json'},body:'{}'},h.env); expect(res.status).toBe(400); expect((await res.json() as any).error).toContain('Missing asset creation not allowed'); });
 });
+
+describe('wealth import same-batch sequencing regression', () => {
+  const tcsBuy = (row_number=1, date='2026-04-01', qty='57') => ({ id:row_number, row_number, status:'valid', normalized_json:JSON.stringify({transaction_type:'buy',trade_date:date,quantity:qty,gross_amount:5700,net_amount:5700,movement_id:null,account:{id:9},asset:{candidate:{name:'TCS',asset_type:'stock',symbol:'TCS',isin:'INE467B01029',exchange:'NSE',currency:'INR'}}}) });
+  const tcsSell = (row_number=2, date='2026-05-04', qty='57', status='valid') => ({ id:row_number, row_number, status, normalized_json:JSON.stringify({transaction_type:'sell',trade_date:date,quantity:qty,gross_amount:6000,net_amount:6000,movement_id:null,account:{id:9},asset:{candidate:{name:'TCS',asset_type:'stock',symbol:'TCS',isin:'INE467B01029',exchange:'NSE',currency:'INR'}}}) });
+  function commitHarness(rows:any[], failedRows:any[] = [], existingTx:any[] = []) {
+    const prepare = vi.fn((query: string) => ({ bind: vi.fn(() => ({
+      all: vi.fn(async () => {
+        if (query.includes("status='failed'")) return { results: failedRows };
+        if (query.includes('FROM wealth_import_rows')) return { results: rows };
+        if (query.includes('FROM investment_transactions')) return { results: existingTx };
+        return { results: [] };
+      }),
+      first: vi.fn(async () => query.includes('SELECT * FROM wealth_import_batches') ? {id:7,status:'validated',valid_rows:rows.length,invalid_rows:0} : null),
+      run: vi.fn(async () => ({ success: true, meta: { last_row_id: 100, changes: 1 } })),
+    })) }));
+    return { ...harness({ prepare } as unknown as D1Database), prepare };
+  }
+  it('imports buy then later sell for a new TCS asset in one batch without oversell or movements', async () => {
+    const h=commitHarness([tcsBuy(), tcsSell()]);
+    const res=await h.app.request('/api/wealth/imports/7/commit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({create_missing_assets:true})},h.env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({imported_rows:2,failed_rows:0});
+    const sql=h.prepare.mock.calls.map((c:any)=>c[0]).join('\n');
+    expect((sql.match(/INSERT INTO investment_assets/g)||[])).toHaveLength(1);
+    expect((sql.match(/INSERT INTO investment_transactions/g)||[])).toHaveLength(2);
+    expect(sql).toMatch(/status=\?,committed_at=.*WHERE id=\?/);
+    expect(sql).not.toMatch(/INSERT INTO movements/);
+  });
+  it('rejects sell before buy in the same batch', async () => {
+    const h=commitHarness([tcsSell(1,'2026-04-01'), tcsBuy(2,'2026-05-04')], [{id:1},{id:2}]);
+    const res=await h.app.request('/api/wealth/imports/7/commit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({create_missing_assets:true})},h.env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({failed_rows:2});
+    expect(h.prepare.mock.calls.map((c:any)=>c[0]).join('\n')).not.toMatch(/INSERT INTO investment_transactions/);
+  });
+  it('rejects sells greater than same-batch buys', async () => {
+    const h=commitHarness([tcsBuy(1,'2026-04-01','10'), tcsSell(2,'2026-05-04','11')], [{id:1},{id:2}]);
+    const res=await h.app.request('/api/wealth/imports/7/commit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({create_missing_assets:true})},h.env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({failed_rows:2});
+  });
+  it('allows multiple buys followed by a sell and uses row order for same-date sequencing', async () => {
+    const h=commitHarness([tcsBuy(1,'2026-04-01','20'), tcsBuy(2,'2026-04-01','37'), tcsSell(3,'2026-04-01','57')]);
+    const res=await h.app.request('/api/wealth/imports/7/commit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({create_missing_assets:true})},h.env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({imported_rows:3,failed_rows:0});
+  });
+  it('retry skips imported rows and imports only the previously failed TCS sell once', async () => {
+    const h=commitHarness([{...tcsBuy(),status:'imported',created_transaction_id:55,created_asset_id:100}, tcsSell(2,'2026-05-04','57','failed')], [], [{id:55,account_id:9,asset_id:100,transaction_type:'buy',trade_date:'2026-04-01',quantity:'57',gross_amount:5700,net_amount:5700}]);
+    const res=await h.app.request('/api/wealth/imports/7/commit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({create_missing_assets:true})},h.env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({imported_rows:1,skipped_rows:1,failed_rows:0});
+    const sql=h.prepare.mock.calls.map((c:any)=>c[0]).join('\n');
+    expect((sql.match(/INSERT INTO investment_transactions/g)||[])).toHaveLength(1);
+  });
+});
