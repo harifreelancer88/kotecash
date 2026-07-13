@@ -13,6 +13,8 @@ CREATE TABLE ai_document_extractions (
   extracted_json TEXT,
   validation_json TEXT,
   usage_json TEXT,
+  error_code TEXT,
+  error_message TEXT,
   estimated_cost INTEGER,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
