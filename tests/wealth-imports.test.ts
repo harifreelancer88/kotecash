@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fingerprint, normalizeImportRow, validateMapping } from '../src/server/wealth/imports';
+import { fingerprint, normalizeImportRow, resolveAccount, resolveAsset, validateMapping } from '../src/server/wealth/imports';
 
 describe('wealth import helpers', () => {
   it('validates header mapping', () => expect(validateMapping({Date:'trade_date'}, ['Date'])).toEqual({Date:'trade_date'}));
@@ -10,8 +10,6 @@ describe('wealth import helpers', () => {
   it('rejects invalid money', () => expect(()=>normalizeImportRow({Amt:'12.3',Type:'buy'}, {Amt:'gross_amount',Type:'transaction_type'})).toThrow(/gross_amount/));
   it('creates deterministic fingerprints', async () => { const n={transaction_type:'buy',trade_date:'2026-01-01',quantity:'1',unit_price:'2',gross_amount:2,charges:0,taxes:0,net_amount:2}; const a={id:1}; const s={id:2}; await expect(fingerprint(1,n,a,s)).resolves.toBe(await fingerprint(1,n,a,s)); });
 });
-
-import { resolveAsset } from '../src/server/wealth/imports';
 
 describe('wealth asset resolver order', () => {
   function ctx(rows:any[]) { return { env:{ DB:{ prepare:(query:string)=>({ bind:(...binds:any[])=>({ all:async()=>({results:rows.filter(r => query.includes(r.match)).map(r=>r.row)}), first:async()=>null, run:async()=>({success:true,meta:{}}) }) }) } } } as any; }
@@ -27,5 +25,12 @@ describe('wealth asset resolver order', () => {
     const asset={id:3,name:'Exact Name',asset_type:'stock'};
     await expect(resolveAsset(ctx([{match:'lower(name)=lower(?)',row:asset}]),1,{asset_name:'Exact Name',asset_type:'stock',currency:'INR'})).resolves.toMatchObject({id:3,name:'Exact Name'});
     await expect(resolveAsset(ctx([]),1,{asset_name:'NewCo',symbol:'NEWCO',exchange:'NSE',asset_type:'stock',currency:'INR'})).resolves.toMatchObject({candidate:{name:'NewCo',symbol:'NEWCO',exchange:'NSE',asset_type:'stock'}});
+  });
+});
+
+describe('wealth account resolver explicit account_id', () => {
+  it('accepts explicit valid account_id without account_name', async () => {
+    const ctx = { env: { DB: { prepare: () => ({ bind: (...binds:any[]) => ({ first: async () => binds[0] === 9 ? { id: 9, name: 'Zerodha', account_type: 'brokerage' } : null, all: async () => ({ results: [] }), run: async () => ({ success: true, meta: {} }) }) }) } } } as any;
+    await expect(resolveAccount(ctx, 1, { account_id: 9 }, {})).resolves.toMatchObject({ id: 9, name: 'Zerodha' });
   });
 });

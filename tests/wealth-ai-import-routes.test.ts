@@ -101,7 +101,7 @@ describe('wealth AI prepare regression', () => {
   function prepareHarness(opts:any={}) {
     const insertedRows:any[]=[]; let batchSeq=100;
     const extraction={id:5,user_id:1,file_name:'h.pdf',file_hash:'hash5',status:'extracted',deleted_at:null,extracted_json:JSON.stringify({document:{document_type:'holdings_statement'},holdings:opts.holdings||[{asset_name:'Reliance Industries',symbol:'RELIANCE',isin:'INE002A01018',exchange:'NSE',quantity:'2',average_cost:'100.40',confidence:0.9}]})};
-    const account={id:9,name:'Zerodha',account_type:'brokerage'};
+    const account={id:9,name:'Zerodha',account_type:'brokerage',is_active:opts.inactive?0:1};
     const otherAccount=null;
     const asset=opts.asset===undefined?{id:11,name:'Reliance Industries',asset_type:'stock',symbol:'RELIANCE',isin:'INE002A01018',exchange:'NSE'}:opts.asset;
     const prepare=vi.fn((query:string)=>({bind:vi.fn((...binds:any[])=>({
@@ -124,7 +124,9 @@ describe('wealth AI prepare regression', () => {
     const json:any=await res.json();
     expect(json.valid_rows).toBe(1);
     expect(json.rows[0].account.name).toBe('Zerodha');
+    expect(insertedRows[0].raw.account_id).toBe(9);
     expect(insertedRows[0].raw.account_name).toBe('Zerodha');
+    expect(insertedRows[0].normalized.account_id).toBe(9);
     expect(insertedRows[0].normalized.account.id).toBe(9);
     expect(insertedRows[0].normalized.asset.id).toBe(11);
     expect(insertedRows[0].normalized.unit_price).toBe('100.4');
@@ -136,8 +138,58 @@ describe('wealth AI prepare regression', () => {
     const {h}=prepareHarness();
     const res=await h.app.request('/api/wealth/ai-import/5/prepare',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account_id:99})},h.env);
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({error:'Invalid default account'});
+    expect(await res.json()).toMatchObject({error:'Invalid account_id'});
   });
+
+  it('rejects missing target account before creating a preview batch', async()=>{
+    const {h,prepare}=prepareHarness();
+    const res=await h.app.request('/api/wealth/ai-import/5/prepare',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({})},h.env);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({error:'Select a target Wealth account before preparing the import.'});
+    expect(prepare.mock.calls.map(c=>c[0]).join('\n')).not.toMatch(/INSERT INTO wealth_import_batches/);
+  });
+  it('rejects inactive target account before creating a preview batch', async()=>{
+    const {h,prepare}=prepareHarness({inactive:true});
+    const res=await h.app.request('/api/wealth/ai-import/5/prepare',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account_id:9})},h.env);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({error:'Selected account is inactive'});
+    expect(prepare.mock.calls.map(c=>c[0]).join('\n')).not.toMatch(/INSERT INTO wealth_import_batches/);
+  });
+  it('keeps a prior invalid preview non-committable while allowing a corrected retry batch', async()=>{
+    let batchSeq=5; const insertedRows:any[]=[];
+    const extraction={id:5,user_id:1,file_name:'h.pdf',file_hash:'hash5',status:'ready_for_import',deleted_at:null,extracted_json:JSON.stringify({document:{document_type:'holdings_statement'},holdings:[{asset_name:'Reliance Industries',symbol:'RELIANCE',isin:'INE002A01018',exchange:'NSE',quantity:'2',average_cost:'100.40'}]})};
+    const prepare=vi.fn((query:string)=>({bind:vi.fn((...binds:any[])=>({
+      first:vi.fn(async()=> query.includes('FROM ai_document_extractions') ? extraction : query.includes('FROM portfolios') ? {id:9,name:'Zerodha',account_type:'brokerage',is_active:1} : null),
+      all:vi.fn(async()=>({results:query.includes('FROM investment_assets') ? [{id:11,name:'Reliance Industries',asset_type:'stock'}] : []})),
+      run:vi.fn(async()=>{ if(query.includes('INSERT INTO wealth_import_rows')) insertedRows.push({batch:batchSeq,normalized:JSON.parse(binds[4]),status:binds[6]}); return {success:true,meta:{last_row_id: query.includes('wealth_import_batches')?++batchSeq:1,changes:1}}; }),
+    }))}));
+    const h=harness({prepare} as unknown as D1Database);
+    const res=await h.app.request('/api/wealth/ai-import/5/prepare',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account_id:9})},h.env);
+    expect(res.status).toBe(200);
+    expect((await res.json()).batch_id).toBe(6);
+    expect(insertedRows[0].normalized.account.name).toBe('Zerodha');
+  });
+  it('turns 17 representative holdings into valid rows or asset creation candidates with non-zero opening cost and no movements', async()=>{
+    const holdings=Array.from({length:17},(_,i)=>({asset_name:`Stock ${i+1}`,symbol:`S${i+1}`,isin:`INE${String(i+1).padStart(9,'0')}`,exchange:'NSE',quantity:'2',average_cost:'10',total_cost:'20'}));
+    const {h,insertedRows,prepare}=prepareHarness({asset:null,holdings});
+    const res=await h.app.request('/api/wealth/ai-import/5/prepare',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account_id:9})},h.env);
+    expect(res.status).toBe(200);
+    const json:any=await res.json();
+    expect(json.valid_rows).toBe(17);
+    expect(json.invalid_rows).toBe(0);
+    expect(insertedRows).toHaveLength(17);
+    for (const row of insertedRows) {
+      expect(row.status).toBe('valid');
+      expect(row.normalized.account.name).toBe('Zerodha');
+      expect(row.normalized.account_id).toBe(9);
+      expect(row.normalized.asset.candidate.name).toMatch(/^Stock /);
+      expect(row.normalized.gross_amount).toBe(20);
+      expect(row.normalized.net_amount).toBe(20);
+      expect(row.normalized.movement_id).toBeNull();
+    }
+    expect(prepare.mock.calls.map(c=>c[0]).join('\n')).not.toMatch(/INSERT INTO movements/);
+  });
+
   it('uses extracted total_cost when present', async()=>{
     const {h,insertedRows}=prepareHarness({holdings:[{asset_name:'Reliance Industries',symbol:'RELIANCE',isin:'INE002A01018',exchange:'NSE',quantity:'2',average_cost:'100.40',total_cost:'250',confidence:0.9}]});
     const res=await h.app.request('/api/wealth/ai-import/5/prepare',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account_id:9})},h.env);

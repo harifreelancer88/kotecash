@@ -58,3 +58,15 @@ describe('wealth AI import UI readiness and polling', () => {
     vi.useRealTimers();
   });
 });
+
+describe('wealth AI import prepare payload', () => {
+  it('submits selected numeric account_id field expected by backend', () => {
+    const originalDocument = context.document;
+    context.document = {
+      getElementById: (id: string) => ({ value: id === 'ai-account' ? '9' : '2026-04-01' }),
+      querySelectorAll: () => [],
+    } as any;
+    expect(AI.preparePayload()).toEqual({ account_id: 9, cutover_date: '2026-04-01' });
+    context.document = originalDocument;
+  });
+});
