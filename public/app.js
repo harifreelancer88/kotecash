@@ -12,6 +12,7 @@ var M = {
   cicilan: [], txns: [], networth: [], goals: [], earmarks: [],
   budgets: [], expenseCats: [], incomeCats: [],
   recurring: [],
+  dashboard: {},
 };
 
 // name/id resolution maps
@@ -140,10 +141,10 @@ async function loadAll() {
   });
 
   M.income = dash.income; M.expense = dash.expense; M.net = dash.sisa;
-  M.savingsRate = dash.savingsRate; M.dti = dash.dti;
+  M.savingsRate = dash.savingsRate; M.dti = dash.dti; M.dashboard = dash || {};
 
   M.networth = (nw.snapshots || []).map(function (s) {
-    return { month: s.month, assets: s.assets, liabilities: s.liabilities };
+    return { month: s.month, assets: s.assets, liabilities: s.liabilities, netWorth: s.netWorth, assetBreakdown: s.assetBreakdown || {}, liabilityBreakdown: s.liabilityBreakdown || {}, valuation_complete: s.valuation_complete, warnings: s.warnings || [] };
   });
 
   M.recurring = (recur || []).map(function (r) {
@@ -291,13 +292,13 @@ function renderDashboard() {
     ? ["Healthy", "text-[#4A8C6F]"]
     : M.dti < 0.5 ? ["High", "text-[#D4A24E]"] : ["Critical", "text-[#C44B4B]"];
 
-  var totalLiquid = M.wallets.reduce(function (s, w) { return s + walletBalance(w.name); }, 0);
-  var totalCC = M.creditCards.reduce(function (s, c) { return s + c.balance; }, 0);
-  var totalDep = M.deposits.reduce(function (s, d) { return s + d.amount; }, 0);
-  var totalPorto = M.portfolios.reduce(function (s, p) { return s + p.value; }, 0);
-  var totalAssets = totalDep + totalPorto;
-  var totalCicilanSisa = M.cicilan.reduce(function (s, c) { return s + c.sisa; }, 0);
-  var netWorth = totalLiquid + totalAssets - totalCC - totalCicilanSisa;
+  var totalLiquid = M.dashboard.totalLiquid ?? M.wallets.reduce(function (s, w) { return s + walletBalance(w.name); }, 0);
+  var totalCC = M.dashboard.totalCC ?? M.creditCards.reduce(function (s, c) { return s + c.balance; }, 0);
+  var totalDep = M.dashboard.totalDeposits ?? M.deposits.reduce(function (s, d) { return s + d.amount; }, 0);
+  var totalPorto = M.dashboard.wealthInvestmentValue ?? M.dashboard.totalPortfolios ?? M.portfolios.reduce(function (s, p) { return s + p.value; }, 0);
+  var totalAssets = M.dashboard.totalAssets ?? (totalLiquid + totalDep + totalPorto);
+  var totalCicilanSisa = M.dashboard.totalCicilanSisa ?? M.cicilan.reduce(function (s, c) { return s + c.sisa; }, 0);
+  var netWorth = M.dashboard.netWorth ?? (totalAssets - totalCC - totalCicilanSisa);
   var totalEarmarked = M.earmarks.reduce(function (s, e) { return s + e.amount; }, 0);
   var walletEarmarked = M.earmarks.filter(function (e) { return isWalletSource(e.source); })
     .reduce(function (s, e) { return s + e.amount; }, 0);
@@ -346,9 +347,10 @@ function renderDashboard() {
     '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">' +
       '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="wallet" class="w-3.5 h-3.5" style="color:var(--c-focus);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Liquid</span></div><div class="text-lg font-bold mono ' + (totalLiquid >= 0 ? "text-[#4A8C6F]" : "text-[#C44B4B]") + '">Rp' + fmt(totalLiquid) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">' + M.wallets.length + ' wallets</div><div class="flex gap-2 mt-2 pt-2 text-[9px]" style="border-top:1px solid var(--c-border);"><div><span style="color:var(--c-sub);">Free </span><span class="mono font-medium ' + (totalFree >= 0 ? "text-[#4A8C6F]" : "text-[#C44B4B]") + '">Rp' + fmt(totalFree) + '</span></div><div><span style="color:var(--c-sub);">Earmarked </span><span class="mono font-medium" style="color:var(--c-focus);">Rp' + fmt(totalEarmarked) + "</span></div></div></div>" +
       '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="credit-card" class="w-3.5 h-3.5" style="color:var(--c-danger);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">CC Debt</span></div><div class="text-lg font-bold mono" style="color:var(--c-danger);">Rp' + fmt(totalCC) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">' + M.creditCards.length + " cards</div></div>" +
-      '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="briefcase" class="w-3.5 h-3.5" style="color:var(--c-focus);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Assets</span></div><div class="text-lg font-bold mono" style="color:var(--c-ink);">Rp' + fmt(totalAssets) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">deposits + portfolios</div></div>' +
+      '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="briefcase" class="w-3.5 h-3.5" style="color:var(--c-focus);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Assets</span></div><div class="text-lg font-bold mono" style="color:var(--c-ink);">Rp' + fmt(totalAssets) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">cash + deposits + investments</div></div>' +
       '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="line-chart" class="w-3.5 h-3.5" style="color:var(--c-primary);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Net Worth</span></div><div class="text-lg font-bold mono ' + (netWorth >= 0 ? "text-[#4A8C6F]" : "text-[#C44B4B]") + '">' + (netWorth < 0 ? "−" : "") + "Rp" + fmt(Math.abs(netWorth)) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">' + (netWorth >= 0 ? "positive" : "negative") + "</div></div>" +
     "</div>" +
+    '<div class="card p-4 mb-6"><div class="flex items-center justify-between gap-3"><div><div class="text-[10px] uppercase tracking-wide mb-1" style="color:var(--c-sub);">Investments</div><div class="text-xl font-bold mono" style="color:var(--c-primary);">Rp' + fmt(totalPorto) + '</div><div class="text-[11px] mt-1" style="color:var(--c-sub);">Wealth value included in net worth · <a href="/?page=wealth" data-page="wealth" style="color:var(--c-focus);">open Wealth</a></div></div><span class="text-[10px] px-2 py-1 rounded-full" style="background:' + (M.dashboard.wealthValuationComplete === false ? 'rgba(212,162,78,.14);color:var(--c-warning);' : 'rgba(74,140,111,.12);color:var(--c-success);') + '">' + (M.dashboard.wealthValuationComplete === false ? 'Warnings' : 'Complete') + '</span></div></div>' +
     '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">' +
       '<div class="card p-4 min-w-0"><div class="flex items-center justify-between gap-2 mb-2"><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Monthly Flow</span><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ' + health[1] + '"><i data-lucide="' + health[2] + '" class="w-3 h-3"></i> ' + health[0] + '</span></div><div class="text-xl font-bold mono" style="color:var(--c-ink);">' + pct(M.savingsRate) + '</div><div class="text-[11px] mt-1" style="color:var(--c-sub);">' + (M.income > 0 ? pct(M.expense / M.income) : "0%") + " spent · Rp" + fmt(M.net) + " sisa · Rp" + fmt(totalEarmarked) + " earmarked</div></div>" +
       '<div class="card p-4 min-w-0"><div class="flex items-center justify-between gap-2 mb-2"><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Debt-to-Income</span><span class="text-[10px] font-semibold flex-shrink-0 ' + dtiTier[1] + '">' + dtiTier[0] + '</span></div><div class="text-xl font-bold mono ' + dtiTier[1] + '">' + pct(M.dti) + '</div><div class="text-[11px] mt-1" style="color:var(--c-sub);">Rp' + fmt(M.cicilan.reduce(function (s, c) { return s + c.monthly; }, 0)) + "/mo debt payments</div></div>" +
@@ -672,19 +674,25 @@ async function deleteRecurring(id) {
 
 /* ── NET WORTH ── */
 function renderNetWorth() {
-  var last = M.networth[M.networth.length - 1] || { assets: 0, liabilities: 0 };
+  var last = M.networth[M.networth.length - 1] || { assets: 0, liabilities: 0, assetBreakdown: {}, liabilityBreakdown: {}, warnings: [] };
   var prev = M.networth[M.networth.length - 2] || last;
-  var nw = last.assets - last.liabilities;
-  var delta = nw - (prev.assets - prev.liabilities);
+  var nw = last.netWorth ?? (last.assets - last.liabilities);
+  var delta = nw - (prev.netWorth ?? (prev.assets - prev.liabilities));
   var netColor = nw >= 0 ? "text-[#4A8C6F]" : "text-[#C44B4B]";
-  var deltaColor = delta >= 0 ? "text-[#4A8C6F]" : "text-[#C44B4B]";
+  var warn = last.valuation_complete === false || (last.warnings || []).length;
+  var breakdown = last.assetBreakdown || {};
+  var rows = Object.keys(breakdown).map(function (k) { return '<tr><td class="p-2">' + esc(k.replace(/_/g, " ")) + '</td><td class="p-2 text-right mono">Rp' + fmt(breakdown[k]) + '</td></tr>'; }).join("");
+  var lrows = Object.keys(last.liabilityBreakdown || {}).map(function (k) { return '<tr><td class="p-2">' + esc(k.replace(/_/g, " ")) + '</td><td class="p-2 text-right mono">Rp' + fmt(last.liabilityBreakdown[k]) + '</td></tr>'; }).join("");
   return '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Net Worth</h1><p class="page-subtitle">Track your assets, liabilities, and wealth over time</p>' +
-    '<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">' +
-      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Assets</div><div class="text-xl font-bold mono" style="color: var(--c-success);">Rp' + fmt(last.assets) + "</div></div>" +
-      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Liabilities</div><div class="text-xl font-bold mono" style="color: var(--c-danger);">Rp' + fmt(last.liabilities) + "</div></div>" +
-      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Net Worth</div><div class="text-xl font-bold mono ' + netColor + '">' + (nw < 0 ? "−" : "") + "Rp" + fmt(Math.abs(nw)) + ' <span class="text-sm ' + deltaColor + '">' + (delta >= 0 ? "+" : "") + fmt(delta) + "</span></div></div>" +
-    "</div>" +
-    '<div class="card p-5"><div class="section-title">Trend</div><div style="height:280px"><canvas id="chartNetWorth"></canvas></div></div>';
+    (warn ? '<div class="card p-3 mb-4 text-xs" style="color:var(--c-warning);background:rgba(212,162,78,.10);">Valuation incomplete: ' + esc((last.warnings || []).slice(0,3).join(", ")) + '</div>' : '') +
+    '<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">' +
+      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Assets</div><div class="text-xl font-bold mono" style="color: var(--c-success);">Rp' + fmt(last.assets) + '</div></div>' +
+      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Liabilities</div><div class="text-xl font-bold mono" style="color: var(--c-danger);">Rp' + fmt(last.liabilities) + '</div></div>' +
+      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Investments</div><div class="text-xl font-bold mono" style="color: var(--c-primary);">Rp' + fmt(last.wealthInvestmentValue || breakdown.stocks + breakdown.mutual_funds + breakdown.etfs + breakdown.retirement + breakdown.fixed_income + breakdown.manual_portfolios + breakdown.other_investments) + '</div></div>' +
+      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Net Worth</div><div class="text-xl font-bold mono ' + netColor + '">' + (nw < 0 ? "−" : "") + 'Rp' + fmt(Math.abs(nw)) + ' <span class="text-sm">' + (delta >= 0 ? "+" : "") + fmt(delta) + '</span></div></div>' +
+    '</div>' +
+    '<div class="grid grid-cols-1 lg:grid-cols-3 gap-4"><div class="card p-5 lg:col-span-2"><div class="section-title">Trend</div><div style="height:280px"><canvas id="chartNetWorth"></canvas></div></div>' +
+    '<div class="card p-5"><div class="section-title">Breakdown</div><table class="w-full text-sm"><tbody>' + rows + lrows + '</tbody></table></div></div>';
 }
 function initNetWorthChart() {
   var ctx = document.getElementById("chartNetWorth");

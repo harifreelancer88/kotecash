@@ -875,3 +875,15 @@ Money storage convention: KoteCash and Wealth use integer whole currency units. 
 Bugs fixed: Wealth browser money formatting no longer divides integer amounts by 100, transaction amount labels now state whole INR units instead of paise, and regression coverage documents the whole-unit INR display convention.
 
 Known limitations: Wealth still has no automated prices, monthly net-worth integration, generalized liabilities migration, XLSX/PDF/CAS import, or production deployment as intentionally constrained for this phase.
+
+## Phase 6 progress note — Wealth net-worth integration
+
+Phase 6 integrates Wealth investment values into current dashboard totals, the main net-worth response, and monthly net-worth reconstruction. Portfolio records are now valued through one backend valuation service using account `valuation_mode` so legacy manual portfolios, holdings-based accounts, and hybrid accounts are not counted twice.
+
+Valuation modes:
+
+- `holdings`: derived open holdings are valued from investment transactions and the latest investment price on or before the requested as-of date.
+- `manual_snapshot`: value comes from the latest `balance_history` portfolio snapshot on or before as-of; holdings are not added on top.
+- `hybrid`: holdings are authoritative when detailed holdings exist. If holdings are absent, the service falls back to the latest manual snapshot and reports a warning because the schema cannot yet distinguish residual account cash from total account value.
+
+Historical reconstruction uses the same valuation service for each month end and never looks forward to future prices. Missing historical prices exclude that open holding from market value and mark the month incomplete. Stale prices and excluded accounts are surfaced as warnings. Whole-INR integer amounts remain the reporting convention.

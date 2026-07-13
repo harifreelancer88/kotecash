@@ -314,3 +314,45 @@ Standard columns:
 - `POST /api/wealth/imports/:id/commit` explicitly commits a previewed batch. Body options include `allow_partial`, `create_missing_accounts`, `create_missing_assets`, and `skip_duplicates`. Commit rechecks ownership, duplicates, movement links, and oversells, then creates investment transactions and upserts same-date prices with `import_batch_id`. Retrying is idempotent for already imported rows.
 - `POST /api/wealth/imports/:id/rollback` rolls back imported or partially imported batches by deleting only batch-created investment transactions and prices. It refuses rollback when later non-imported transactions could be invalidated. Accounts/assets are not deleted.
 - `GET /api/wealth/imports/template` downloads the standard CSV header template.
+
+### Phase 6 Wealth net-worth integration
+
+KoteCash exposes Wealth investment values in the dashboard and net-worth APIs. Backend APIs are authoritative; clients should display returned totals and breakdowns instead of recalculating financial values in JavaScript.
+
+#### Valuation mode rules
+
+Investment accounts are stored in `portfolios` and use `valuation_mode`:
+
+- `holdings`: account value is the sum of open holdings derived from `investment_transactions`, valued with the latest `investment_prices.price_date` on or before `as_of`.
+- `manual_snapshot`: account value is the latest `balance_history` row for `entity_kind='portfolio'` on or before `as_of`; detailed holdings are not added.
+- `hybrid`: holdings are authoritative when present. If no holdings exist, the latest manual snapshot is used and a warning explains the fallback. Full manual snapshots are never added on top of holdings.
+
+Historical calculations never use future prices. Missing prices mark valuation incomplete and the affected holding is excluded from market value; cost basis is not silently treated as market value. `include_in_net_worth=0` accounts are excluded from net-worth totals but may be reported separately. Amounts remain whole-INR integers.
+
+#### Dashboard fields
+
+`GET /api/dashboard` preserves existing fields and adds:
+
+- `wealthInvestmentValue`
+- `wealthHoldingsValue`
+- `wealthManualSnapshotValue`
+- `wealthValuationComplete`
+- `wealthWarnings`
+- `excludedWealthInvestmentValue`
+- `assetBreakdown` with `wallets`, `deposits`, `stocks`, `mutual_funds`, `etfs`, `retirement`, `fixed_income`, `manual_portfolios`, and `other_investments`
+
+#### Net-worth response
+
+`GET /api/net-worth` returns monthly snapshots with current and historical assets, liabilities, net worth, `assetBreakdown`, `liabilityBreakdown`, Wealth totals, `valuation_complete`, and warnings. Wallets/deposits/liabilities continue to use movement-based reconstruction. Wealth accounts use the valuation rules above for each month end.
+
+#### Snapshot endpoints
+
+`POST /api/net-worth/snapshot` supports manual or automatic snapshots and stores breakdown/warnings metadata when available. Locked snapshots cannot be overwritten unless an explicit `force=true` update is sent.
+
+`POST /api/net-worth/recalculate`
+
+```json
+{ "from": "YYYY-MM", "to": "YYYY-MM", "include_current_month": false }
+```
+
+Recalculates unlocked monthly snapshots only, creates missing rows, skips locked months, and returns `{ recalculated, created, skipped_locked, warnings }`.
