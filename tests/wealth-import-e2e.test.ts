@@ -140,15 +140,36 @@ describe('wealth canonical current-FY import end to end', () => {
     try {
       seed(dbFile);
       const h = routeHarness(sqliteD1(dbFile));
+      const currentFyCsv = csv(currentFyRows());
       const body = new FormData();
-      body.append('file', new File([csv(currentFyRows())], 'current-fy.csv', { type: 'text/csv' }));
+      body.append('file', new File([currentFyCsv], 'current-fy.csv', { type: 'text/csv' }));
       body.append('mapping', JSON.stringify({}));
       body.append('options', JSON.stringify({ default_currency: 'INR' }));
       const preview = await h.app.request('/api/wealth/imports/preview', { method: 'POST', body }, h.env);
       expect(preview.status).toBe(200);
-      const p: any = await preview.json();
+      let p: any = await preview.json();
       expect(p).toMatchObject({ total_rows: 56, valid_rows: 56, invalid_rows: 0, duplicate_rows: 0 });
       expect(new Set(p.rows.filter((r: any) => r.asset?.candidate).map((r: any) => r.asset.candidate.isin)).size).toBe(51);
+
+      const del = await h.app.request(`/api/wealth/imports/${p.batch_id}`, { method: 'DELETE' }, h.env);
+      expect(del.status).toBe(200);
+      expect(await del.json()).toMatchObject({ deleted: true, deleted_rows: 56 });
+      const deletedCounts = JSON.parse(sql(dbFile, `SELECT
+        (SELECT COUNT(*) FROM wealth_import_rows WHERE batch_id=${p.batch_id}) AS import_rows,
+        (SELECT COUNT(*) FROM wealth_import_batches WHERE id=${p.batch_id}) AS batches,
+        (SELECT COUNT(*) FROM investment_transactions WHERE import_batch_id=${p.batch_id}) AS imported_tx,
+        (SELECT COUNT(*) FROM investment_prices WHERE import_batch_id=${p.batch_id}) AS imported_prices,
+        (SELECT COUNT(*) FROM movements) AS movements;`, true))[0];
+      expect(deletedCounts).toMatchObject({ import_rows: 0, batches: 0, imported_tx: 0, imported_prices: 0, movements: 0 });
+
+      const secondBody = new FormData();
+      secondBody.append('file', new File([currentFyCsv], 'current-fy.csv', { type: 'text/csv' }));
+      secondBody.append('mapping', JSON.stringify({}));
+      secondBody.append('options', JSON.stringify({ default_currency: 'INR' }));
+      const secondPreview = await h.app.request('/api/wealth/imports/preview', { method: 'POST', body: secondBody }, h.env);
+      expect(secondPreview.status).toBe(200);
+      p = await secondPreview.json();
+      expect(p).toMatchObject({ total_rows: 56, valid_rows: 56, invalid_rows: 0, duplicate_rows: 0 });
 
       const commit = await h.app.request(`/api/wealth/imports/${p.batch_id}/commit`, {
         method: 'POST',
