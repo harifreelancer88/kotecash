@@ -887,3 +887,13 @@ Valuation modes:
 - `hybrid`: holdings are authoritative when detailed holdings exist. If holdings are absent, the service falls back to the latest manual snapshot and reports a warning because the schema cannot yet distinguish residual account cash from total account value.
 
 Historical reconstruction uses the same valuation service for each month end and never looks forward to future prices. Missing historical prices exclude that open holding from market value and mark the month incomplete. Stale prices and excluded accounts are surfaced as warnings. Whole-INR integer amounts remain the reporting convention.
+
+## FY 2026 cutover and AI extraction foundation progress
+
+KoteCash Wealth now has a deterministic FY 2026 cutover foundation for tracking investments from 1 April 2026 onward. Previous-FY tradebooks are reduced into FIFO opening `transfer_in` positions dated 31 March 2026, while current-FY rows are staged as ordinary import rows. Closed pre-cutover positions are summarized rather than shown as active-period transactions. Oversold or incomplete pre-cutover histories are blocked as unresolved instead of creating negative positions.
+
+Order-level preprocessing can aggregate execution rows by trade date, order id, symbol, ISIN, exchange, and transaction type. Quantities and weighted prices use normalized decimal helpers; money remains whole-INR integers using half-up rounding. Opening positions and current-FY rows reuse the existing Wealth import preview, duplicate fingerprinting, oversell simulation, commit, idempotent retry, and rollback mechanics. No automatic movements are created.
+
+The OpenAI integration is a server-only structured extractor. Raw financial files are sent to OpenAI only after the user requests extraction, and no financial records are added until the user reviews the extraction, prepares an import preview, and separately confirms the existing import commit. Raw file bytes are not retained; stored audit data is limited to file hash, masked metadata, extraction JSON, validation results, model/response identifiers, and usage metadata. Supported initial files are PDF, PNG, JPG/JPEG, text/plain, and explicitly selected CSV layout interpretation. The model is configured with `OPENAI_DOCUMENT_MODEL`; the API key is provided only through the Cloudflare secret `OPENAI_API_KEY`.
+
+Current limitations: extraction supports only holdings statements, broker tradebooks, broker contract notes, and unknown documents as generic structured proposals. It does not fetch market prices, create tax reports, commit bank/credit-card/EPF/NPS data, ingest email, batch process documents, handle password-protected PDFs, deploy production changes, or apply remote migrations.

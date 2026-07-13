@@ -356,3 +356,13 @@ Historical calculations never use future prices. Missing prices mark valuation i
 ```
 
 Recalculates unlocked monthly snapshots only, creates missing rows, skips locked months, and returns `{ recalculated, created, skipped_locked, warnings }`.
+
+### Wealth FY cutover and AI extraction APIs (implemented)
+
+- `POST /api/wealth/cutover/preview` accepts multipart `previous_tradebook`, optional `current_tradebook`, `mapping` JSON, `account_id`, optional `cutover_date` (default `2026-04-01`), and `aggregate_by_order`. It creates preview batches only; no final transactions, prices, assets, accounts, or movements are committed.
+- `POST /api/wealth/cutover/:preview_id/commit` commits the generated opening `transfer_in` rows first and current-FY rows afterward by reusing the normal Wealth import commit engine. No movements are created.
+- `POST /api/wealth/ai-import/extract` sends one supported document to OpenAI for structured extraction only. Supported initial files are PDF, PNG, JPG/JPEG, text/plain, and CSV only when broker-tradebook AI interpretation is explicitly selected. Defaults are 10 MB and 20 PDF pages where supported by validation. Raw file bytes are not retained.
+- `GET /api/wealth/ai-imports`, `GET /api/wealth/ai-imports/:id`, and `DELETE /api/wealth/ai-imports/:id` manage user-scoped extraction records.
+- `POST /api/wealth/ai-imports/:id/prepare` converts reviewed extraction data into the existing Wealth import preview format. The normal `/api/wealth/imports/:id/commit` endpoint remains the only commit path.
+
+OpenAI is extraction-only. The API key must be configured server-side as a Cloudflare secret named `OPENAI_API_KEY`; optional variables are `OPENAI_DOCUMENT_MODEL`, `OPENAI_MAX_FILE_BYTES`, `OPENAI_MAX_PAGES`, and `OPENAI_REQUEST_TIMEOUT_MS`. Never include the key in frontend JavaScript, docs examples, API responses, logs, or database rows.
