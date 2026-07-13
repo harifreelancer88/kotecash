@@ -3,6 +3,8 @@ import { fingerprint, normalizeImportRow, resolveAccount, resolveAsset, validate
 
 describe('wealth import helpers', () => {
   it('validates header mapping', () => expect(validateMapping({Date:'trade_date'}, ['Date'])).toEqual({Date:'trade_date'}));
+  it('identity-maps canonical CSV headers without manual mapping', () => expect(validateMapping({}, ['account_id','trade_date','transaction_type'])).toEqual({account_id:'account_id',trade_date:'trade_date',transaction_type:'transaction_type'}));
+  it('lets manual mappings override matching canonical headers', () => expect(validateMapping({Date:'trade_date'}, ['trade_date','Date'])).toEqual({Date:'trade_date'}));
   it('rejects duplicate canonical mapping', () => expect(()=>validateMapping({A:'trade_date',B:'trade_date'}, ['A','B'])).toThrow(/Duplicate/));
   it('normalizes row values', () => { const n=normalizeImportRow({Date:'2026-01-01',Type:'Buy',Qty:'1.25',CCY:'inr'}, {Date:'trade_date',Type:'transaction_type',Qty:'quantity',CCY:'currency'}).normalized; expect(n.transaction_type).toBe('buy'); expect(n.currency).toBe('INR'); expect(n.quantity).toBe('1.25'); });
   it('rejects invalid date', () => expect(()=>normalizeImportRow({Date:'01/01/2026',Type:'buy'}, {Date:'trade_date',Type:'transaction_type'})).toThrow(/date/));
