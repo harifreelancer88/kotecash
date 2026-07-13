@@ -61,3 +61,38 @@ describe('wealth AI import extraction route', () => {
     expect(queries.join('\n')).not.toMatch(/INSERT INTO wealth_(transactions|holdings|prices|assets|accounts)\b/i);
   });
 });
+
+describe('wealth AI import schema hardening queries', () => {
+  it('writes and reads the final ai_document_extractions status fields', async () => {
+    extractMock.mockClear();
+    const { res, queries } = await postFile(new File(['%PDF-1.7'], 'statement.pdf', { type: 'application/pdf' }));
+    expect(res.status).toBe(200);
+    const sql = queries.join('\n');
+    expect(sql).toMatch(/processing_started_at/);
+    expect(sql).toMatch(/completed_at=datetime\('now'\)/);
+    expect(sql).toMatch(/error_code=NULL/);
+    expect(sql).toMatch(/error_message=NULL/);
+  });
+
+  it('returns a safe database-update message instead of raw D1 schema errors', async () => {
+    const prepare = vi.fn((query: string) => ({
+      bind: vi.fn(() => ({
+        first: vi.fn(async () => null),
+        all: vi.fn(async () => {
+          throw new Error('D1_ERROR: no such column: error_code: SQLITE_ERROR');
+        }),
+        run: vi.fn(async () => {
+          if (/UPDATE ai_document_extractions SET status='failed'/.test(query)) return { success: true, meta: { changes: 0 } };
+          throw new Error('D1_ERROR: no such column: error_code: SQLITE_ERROR');
+        }),
+      })),
+    }));
+    const h = harness({ prepare } as unknown as D1Database);
+    const res = await h.app.request('/api/wealth/ai-import', {}, h.env);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      error: 'AI extraction is temporarily unavailable. Please retry after the database update.',
+      code: 'database_schema_update_required',
+    });
+  });
+});
