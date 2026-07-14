@@ -50,7 +50,48 @@ CREATE TABLE investment_transactions_phase9 (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-INSERT INTO investment_transactions_phase9 SELECT * FROM investment_transactions;
+INSERT INTO investment_transactions_phase9 (
+  id,
+  user_id,
+  account_id,
+  asset_id,
+  transaction_type,
+  trade_date,
+  settlement_date,
+  quantity,
+  unit_price,
+  gross_amount,
+  charges,
+  taxes,
+  net_amount,
+  movement_id,
+  external_ref,
+  notes,
+  import_batch_id,
+  created_at,
+  updated_at
+)
+SELECT
+  id,
+  user_id,
+  account_id,
+  asset_id,
+  transaction_type,
+  trade_date,
+  settlement_date,
+  quantity,
+  unit_price,
+  gross_amount,
+  charges,
+  taxes,
+  net_amount,
+  movement_id,
+  external_ref,
+  notes,
+  import_batch_id,
+  created_at,
+  updated_at
+FROM investment_transactions;
 DROP TABLE investment_transactions;
 ALTER TABLE investment_transactions_phase9 RENAME TO investment_transactions;
 CREATE INDEX idx_investment_transactions_user ON investment_transactions (user_id);
