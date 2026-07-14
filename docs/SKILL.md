@@ -391,3 +391,33 @@ Marketstack requests use `/v1/eod/latest?symbols=SYMBOL.XNSE,SYMBOL.XNSE&access_
 Provider symbol resolution is deterministic. Assets are checked by asset symbol, exchange, ISIN, asset type, and any configured row in `wealth_provider_symbols` (`asset_id`, `provider`, `provider_symbol`, `provider_exchange`, `verified_at`). If a symbol cannot be mapped confidently, return a row-level unsupported/error reason rather than guessing.
 
 Manual fallback APIs are available for EOD CSV prices. `GET /api/wealth/market-prices/template` returns `symbol,exchange,isin,price_date,close,currency`. `POST /api/wealth/market-prices/import-csv` accepts multipart form data with `file` and optional `commit=true`. Preview validates up to 500 rows and creates no prices; commit writes valid rows as `source='import'`. CSV rows resolve owned assets by `asset_id`, then ISIN, then symbol + exchange; ambiguous matches, invalid/future dates, non-positive closes, duplicate asset/date rows, missing/unsupported currencies, and protected same-date manual/import prices are returned as row-level errors. CSV import never persists raw files and never creates transactions or movements.
+
+### Wealth Portfolio Overview (Phase 8) — `GET /api/wealth/overview`
+Returns a backend-calculated, dashboard-ready investment summary. Optional query parameters: `as_of=YYYY-MM-DD` and `account_id=<portfolio id>`.
+
+Response sections:
+- `summary`: `valuation_date`, `total_invested`, `current_value`, `realised_gain`, `unrealised_gain`, `total_gain`, `absolute_return_percent`, `xirr`, `xirr_status`, active/open/priced/missing/stale counts, `valuation_complete`, and UI-safe `warnings`.
+- `valuation_health`: grouped status (`complete`, `partial`, `stale`, `unavailable`), priced/open/missing/stale counts, latest and oldest price dates, and readable `messages`.
+- `top_gainers`, `top_losers`, `largest_holdings`, `largest_cost_allocations`, `realised_gain_contributors`, `missing_price_holdings`, `stale_price_holdings`: ranked open holdings using backend holding formulas.
+- `allocations`: grouped by `asset`, `account`, `asset_type`, and `institution`, plus `unpriced_assets`.
+- `gain_loss`: realised/unrealised/total gain and positive, negative, flat, and unpriced holding counts.
+- `recent_transactions`: latest 10 investment transactions only.
+- `warnings`: raw/debug warning codes retained for API diagnostics, not for the main UI.
+
+Allocation rules:
+- Excludes inactive accounts, `include_in_net_worth=false` accounts, and closed holdings.
+- Current-value percentages use only the priced portfolio current value as denominator.
+- Unpriced open holdings are excluded from the current-value denominator but remain reported in `unpriced_assets` and allocation completeness.
+- Invested percentages use total open holding cost basis where useful.
+
+Partial valuation behavior:
+- If some holdings are unpriced, `summary.current_value` is the priced partial value, not zero unless the priced value is actually zero.
+- `valuation_complete=false`, missing counts are populated, and health messages explain that portfolio value is partial.
+- APIs never intentionally serialize `NaN` or `Infinity`.
+
+XIRR null behavior:
+- `xirr` may be `null` when cash flows are insufficient or valuation is unsuitable; use `xirr_status` / route warnings to explain it. Do not display null XIRR as `0%`.
+
+Ranking rules:
+- Gainers and losers exclude holdings with missing current value.
+- Ranking ties are deterministic by value, asset name, account name, asset id, and account id.

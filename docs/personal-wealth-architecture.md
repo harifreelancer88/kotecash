@@ -922,3 +922,7 @@ The refresh API is mounted at `POST /api/wealth/market-prices/refresh`, with sta
 Market-price refresh now uses an EOD-first provider architecture. Marketstack is the preferred provider for latest completed end-of-day closes, while Twelve Data remains selectable as an optional adapter. The refresh service remains provider-neutral, batches supported symbols, returns per-asset success/failure rows, stores only `investment_prices`, protects same-date manual/import prices, and records audit run completion as completed, partially completed, or failed.
 
 A provider-symbol mapping table (`wealth_provider_symbols`) supports deterministic provider ticker resolution without scraping exchange websites. NSE symbols use Marketstack's `XNSE` suffix first; BSE is available for explicit verified mappings. A manual EOD CSV preview/commit fallback was added for cases where provider coverage or plan access is unavailable.
+
+## Phase 8 progress note
+
+Phase 8 adds a consolidated Wealth Overview endpoint and a mobile-first overview UI. The endpoint reuses backend holding and performance formulas to provide summary valuation, XIRR status, allocation analytics, gain/loss rankings, valuation-health messages, and recent investment transactions. Partial valuations return priced partial value and grouped health messages instead of showing raw warning codes in the primary UI. Allocation percentages exclude unpriced open holdings from the current-value denominator and exclude inactive or net-worth-excluded accounts.
