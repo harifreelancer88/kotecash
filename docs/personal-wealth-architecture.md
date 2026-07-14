@@ -916,3 +916,9 @@ Do not auto-merge duplicate assets and do not edit production data directly outs
 Phase 7A adds a provider-neutral market-data boundary and a reusable Wealth market-price refresh service for manual Indian stock price updates. The initial adapter supports Twelve Data through server-side Cloudflare environment configuration, uses native `fetch`, and stores successful quotes in `investment_prices` with `source='market'` while preserving existing valuation semantics. Refreshes are explicit user actions only; no Cloudflare Cron, exchange scraping, mutual-fund NAV fetching, or realtime-feed claims are included in this phase.
 
 The refresh API is mounted at `POST /api/wealth/market-prices/refresh`, with status metadata at `GET /api/wealth/market-prices/status`. Audit summaries are persisted in `wealth_price_refresh_runs` without API keys, raw payloads, or full provider URLs.
+
+### Phase 7B progress note: Marketstack EOD prices and CSV fallback
+
+Market-price refresh now uses an EOD-first provider architecture. Marketstack is the preferred provider for latest completed end-of-day closes, while Twelve Data remains selectable as an optional adapter. The refresh service remains provider-neutral, batches supported symbols, returns per-asset success/failure rows, stores only `investment_prices`, protects same-date manual/import prices, and records audit run completion as completed, partially completed, or failed.
+
+A provider-symbol mapping table (`wealth_provider_symbols`) supports deterministic provider ticker resolution without scraping exchange websites. NSE symbols use Marketstack's `XNSE` suffix first; BSE is available for explicit verified mappings. A manual EOD CSV preview/commit fallback was added for cases where provider coverage or plan access is unavailable.

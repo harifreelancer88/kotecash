@@ -3,6 +3,7 @@ import type { Context } from "hono";
 export type Bindings = {
   DB: D1Database;
   TWELVE_DATA_API_KEY?: string;
+  MARKETSTACK_API_KEY?: string;
   MARKET_DATA_PROVIDER?: string;
   MARKET_DATA_TIMEOUT_MS?: string;
   MARKET_DATA_MAX_SYMBOLS_PER_REFRESH?: string;
