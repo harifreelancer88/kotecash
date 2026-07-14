@@ -23,7 +23,7 @@ describe('wealth valuation service',()=>{
     expect(agg.assetBreakdown.stocks).toBe(300);
     expect(agg.assetBreakdown.mutual_funds).toBe(600);
     expect(agg.assetBreakdown.other).toBe(1300); // includes excluded reporting bucket
-    expect(agg.accounts.find(a=>a.account_id===3)?.valuation_source).toBe('hybrid_holdings');
+    expect(agg.accounts.find(a=>a.account_id===3)?.valuation_source).toBe('holdings');
   });
   it('never uses future prices and marks missing historical price incomplete',async()=>{
     const agg=await getWealthAggregation(db({
@@ -35,5 +35,26 @@ describe('wealth valuation service',()=>{
     expect(agg.total).toBe(0);
     expect(agg.valuation_complete).toBe(false);
     expect(agg.warnings.join(',')).toContain('missing_price');
+  });
+  it('surfaces manual snapshot, formula, and legacy provenance without double counting',async()=>{
+    const agg=await getWealthAggregation(db({
+      'FROM portfolios WHERE user_id=?':[
+        {id:10,name:'EPF legacy',account_type:'epf',is_active:1,include_in_net_worth:1,valuation_mode:'manual_snapshot',value:125000},
+        {id:11,name:'EPF snap',account_type:'epf',is_active:1,include_in_net_worth:1,valuation_mode:'manual_snapshot',value:125000},
+        {id:12,name:'FD',account_type:'fixed_deposit',is_active:1,include_in_net_worth:1,valuation_mode:'formula',value:0,metadata:JSON.stringify({principal:100000,interest_rate:7,start_date:'2026-04-01',maturity_date:'2027-04-01',compounding_frequency:'quarterly'})},
+      ],
+      'FROM balance_history':[{id:1,entity_kind:'portfolio',entity_id:10,amount:125000,recorded_at:'2026-07-01 00:00:00'},{id:2,entity_kind:'portfolio',entity_id:11,amount:125000,recorded_at:'2026-07-01 00:00:00'}],
+      'FROM wealth_valuation_snapshots':[{id:99,user_id:1,account_id:11,asset_id:null,valuation_date:'2026-07-14',current_value:126000}],
+    }),1,'2026-07-14');
+    const legacy=agg.accounts.find(a=>a.account_id===10)!;
+    const snap=agg.accounts.find(a=>a.account_id===11)!;
+    const fd=agg.accounts.find(a=>a.account_id===12)!;
+    expect(legacy.valuation_source).toBe('legacy_balance_history');
+    expect(legacy.valuation_message).toContain('legacy balance value');
+    expect(snap.valuation_source).toBe('manual_snapshot');
+    expect(snap.value).toBe(126000);
+    expect(fd.valuation_source).toBe('formula');
+    expect(fd.value).toBeGreaterThan(100000);
+    expect(agg.total).toBe(legacy.value+snap.value+fd.value);
   });
 });

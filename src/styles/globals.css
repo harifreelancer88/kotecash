@@ -217,6 +217,85 @@ html:not(.sidebar-collapsed) .icon-open {
 /* Prevent number/value cells from being clipped by a too-near edge */
 .val-nowrap { white-space: nowrap; }
 
+.wealth-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.wealth-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.wealth-table {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wealth-table table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.wealth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wealth-action {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--c-ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wealth-action.danger {
+  color: var(--c-danger);
+}
+
+.wealth-warning {
+  color: #8a5a00;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.wealth-empty-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-top: 1px solid var(--c-border);
+}
+
+.wealth-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 36px;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+#wealthTabContent,
+#wealthTabContent .card,
+#wealth-import-root {
+  min-width: 0;
+}
+
 
 /* ── Modal / Bottom Sheet ── */
 .modal-mask {
@@ -234,6 +313,32 @@ html:not(.sidebar-collapsed) .icon-open {
 }
 @media (max-width: 768px) {
   .modal-content { border-radius: 16px 16px 0 0; }
+  .wealth-header,
+  .wealth-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .wealth-primary,
+  .wealth-filters > *,
+  .wealth-actions .wealth-action {
+    width: 100%;
+  }
+  .wealth-actions {
+    min-width: 132px;
+  }
+  .wealth-table {
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+  }
+  .modal-content label {
+    width: 100%;
+  }
+  #wealth-import-root .btn,
+  #wealth-import-root button,
+  #wealth-import-root a.btn {
+    min-height: 36px;
+    white-space: normal;
+  }
 }
 
 /* ledger row relative for dropdown */

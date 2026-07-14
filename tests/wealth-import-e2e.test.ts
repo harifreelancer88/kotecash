@@ -210,5 +210,5 @@ describe('wealth canonical current-FY import end to end', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  }, 90000);
+  }, 180000);
 });

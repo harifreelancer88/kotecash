@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import wealthAccounts from '../src/server/routes/wealth-accounts';
 import wealthAssets from '../src/server/routes/wealth-assets';
 import wealthTransactions from '../src/server/routes/wealth-transactions';
+import wealthValuationSnapshots from '../src/server/routes/wealth-valuation-snapshots';
 
 function mockDB(rowsByQuery: { match: string; rows?: any[]; first?: any; run?: any }[] = []) {
   const prepare = vi.fn((query: string) => {
@@ -52,6 +53,23 @@ describe('wealth accounts routes', () => {
     h = harness(wealthAccounts, '/api/wealth/accounts', mockDB());
     expect((await h.app.request('/api/wealth/accounts/8', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Nope' }) }, h.env)).status).toBe(404);
     expect((await h.app.request('/api/wealth/accounts/7', { method: 'DELETE' }, h.env)).status).toBe(200);
+  });
+
+  it('permanently deletes only empty owned accounts and reports dependencies when blocked', async () => {
+    let h = harness(wealthAccounts, '/api/wealth/accounts', mockDB([
+      { match: 'SELECT id, name, institution', first: { id: 7, name: 'Empty' } },
+      { match: '(SELECT COUNT(*) FROM investment_assets', first: { assets: 0, transactions: 0, prices: 0, snapshots: 0, import_rows: 0, import_transactions: 0, movements: 0, legacy_balance_history: 0, earmarks: 0, locked_net_worth_snapshots: 0 } },
+      { match: 'DELETE FROM portfolios', run: { success: true, meta: { changes: 1 } } },
+    ]));
+    let res = await h.app.request('/api/wealth/accounts/7/permanent', { method: 'DELETE' }, h.env);
+    expect(res.status).toBe(200);
+    h = harness(wealthAccounts, '/api/wealth/accounts', mockDB([
+      { match: 'SELECT id, name, institution', first: { id: 8, name: 'Broker' } },
+      { match: '(SELECT COUNT(*) FROM investment_assets', first: { assets: 1, transactions: 73, prices: 17, snapshots: 0, import_rows: 0, import_transactions: 73, movements: 1, legacy_balance_history: 1, earmarks: 0, locked_net_worth_snapshots: 0 } },
+    ]));
+    res = await h.app.request('/api/wealth/accounts/8/permanent', { method: 'DELETE' }, h.env);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ can_delete: false, dependencies: { assets: 1, transactions: 73 } });
   });
 });
 
@@ -123,5 +141,46 @@ describe('wealth asset safe deactivation', () => {
     ]));
     res = await h.app.request('/api/wealth/assets/2', { method: 'DELETE' }, h.env);
     expect(res.status).toBe(200);
+  });
+});
+
+describe('wealth permanent asset deletion', () => {
+  it('deletes empty assets and blocks referenced assets with a dependency report', async () => {
+    let h = harness(wealthAssets, '/api/wealth/assets', mockDB([
+      { match: 'SELECT id FROM investment_assets', first: { id: 9 } },
+      { match: '(SELECT COUNT(*) FROM investment_transactions', first: { transactions: 0, prices: 0, snapshots: 0, import_rows: 0, import_transactions: 0, import_prices: 0, movements: 0, holdings: 0 } },
+      { match: 'DELETE FROM investment_assets', run: { success: true, meta: { changes: 1 } } },
+    ]));
+    let res = await h.app.request('/api/wealth/assets/9/permanent', { method: 'DELETE' }, h.env);
+    expect(res.status).toBe(200);
+    h = harness(wealthAssets, '/api/wealth/assets', mockDB([
+      { match: 'SELECT id FROM investment_assets', first: { id: 10 } },
+      { match: '(SELECT COUNT(*) FROM investment_transactions', first: { transactions: 1, prices: 1, snapshots: 0, import_rows: 0, import_transactions: 1, import_prices: 1, movements: 0, holdings: 1 } },
+    ]));
+    res = await h.app.request('/api/wealth/assets/10/permanent', { method: 'DELETE' }, h.env);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ can_delete: false, dependencies: { transactions: 1, prices: 1 } });
+  });
+});
+
+describe('wealth legacy valuation migration route', () => {
+  it('previews, requires confirmation, and creates one account snapshot without movements', async () => {
+    const db = mockDB([
+      { match: 'SELECT id,name,account_type', first: { id: 5, name: 'ICICI test', account_type: 'epf', valuation_mode: 'manual_snapshot', value: 0 } },
+      { match: 'SELECT COUNT(*) count FROM wealth_valuation_snapshots', first: { count: 0 } },
+      { match: 'SELECT id,amount,recorded_at FROM balance_history', first: { id: 44, amount: 125000, recorded_at: '2026-07-14 00:00:00' } },
+      { match: 'SELECT id,current_value,source FROM wealth_valuation_snapshots', first: null },
+      { match: 'INSERT INTO wealth_valuation_snapshots', run: { success: true, meta: { last_row_id: 88, changes: 1 } } },
+    ]);
+    const h = harness(wealthValuationSnapshots, '/api/wealth/valuation-snapshots', db);
+    let res = await h.app.request('/api/wealth/valuation-snapshots/legacy-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account_id: 5 }) }, h.env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ account_name: 'ICICI test', current_value: 125000, source: 'legacy_balance_history' });
+    res = await h.app.request('/api/wealth/valuation-snapshots/from-legacy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account_id: 5, valuation_date: '2026-07-14' }) }, h.env);
+    expect(res.status).toBe(400);
+    res = await h.app.request('/api/wealth/valuation-snapshots/from-legacy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account_id: 5, valuation_date: '2026-07-14', confirm: true }) }, h.env);
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ id: 88, created: true });
+    expect((db.prepare as any).mock.calls.some((c: any[]) => String(c[0]).includes('INSERT INTO movements'))).toBe(false);
   });
 });
