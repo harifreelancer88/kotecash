@@ -5,7 +5,7 @@ import { parseDecimal, formatDecimal, multiplyQuantityByPriceMinor } from '../we
 import { validateNoOversell, type InvestmentTransactionInput } from '../wealth/formulas';
 
 const route = new Hono<{ Bindings: Bindings; Variables: Variables }>();
-const TYPES = ['buy','sell','sip','redemption','dividend','interest','contribution','withdrawal','transfer_in','transfer_out','bonus','split','charges','maturity'] as const;
+const TYPES = ['buy','sell','sip','contribution','employer_contribution','employee_contribution','interest','dividend','withdrawal','redemption','maturity','transfer_in','transfer_out','fee','tax','adjustment','bonus','split','charges'] as const;
 const needAsset = new Set(['buy','sell','sip','redemption','dividend','transfer_in','transfer_out','bonus','split']);
 const needQty = new Set(['buy','sell','sip','redemption','transfer_in','transfer_out','bonus','split']);
 function bad(error: string) { return { error }; }
@@ -25,7 +25,7 @@ async function normalize(c: AppContext, uid: number, body: any, existing?: any) 
   if ((v.transaction_type === 'buy' || v.transaction_type === 'sip') && net_amount == null && gross_amount != null) net_amount = gross_amount + charges + taxes;
   if (['buy','sip'].includes(v.transaction_type) && gross_amount == null && unit_price == null) throw new Error('unit_price or gross_amount required');
   if (['sell','redemption'].includes(v.transaction_type) && gross_amount == null && net_amount == null) throw new Error('net_amount or gross_amount required');
-  if (['dividend','interest','contribution','withdrawal','maturity'].includes(v.transaction_type) && gross_amount == null && net_amount == null) throw new Error('Amount required');
+  if (['dividend','interest','contribution','employer_contribution','employee_contribution','withdrawal','maturity','fee','tax','adjustment'].includes(v.transaction_type) && gross_amount == null && net_amount == null) throw new Error('Amount required');
   if (v.transaction_type === 'charges' && charges === 0 && net_amount == null) throw new Error('Charges required');
   return { account_id:Number(v.account_id), asset_id:aid, transaction_type:v.transaction_type, trade_date:v.trade_date, settlement_date:optionalText(v.settlement_date), quantity, unit_price, gross_amount, charges, taxes, net_amount, movement_id:v.movement_id?Number(v.movement_id):null, external_ref:optionalText(v.external_ref), notes:optionalText(v.notes) };
 }

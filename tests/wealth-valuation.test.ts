@@ -17,13 +17,13 @@ describe('wealth valuation service',()=>{
       'FROM investment_prices':[ {asset_id:10,price_date:'2026-02-01',price:'150'}, {asset_id:11,price_date:'2026-02-01',price:'200'} ],
       'FROM balance_history':[ {entity_kind:'portfolio',entity_id:2,amount:600,recorded_at:'2026-02-01 00:00:00'}, {entity_kind:'portfolio',entity_id:3,amount:9000,recorded_at:'2026-02-01 00:00:00'}, {entity_kind:'portfolio',entity_id:4,amount:700,recorded_at:'2026-02-01 00:00:00'} ],
     }),1,'2026-02-28');
-    expect(agg.total).toBe(1500); // 2*150 + 600 + 3*200, not hybrid snapshot 9000
-    expect(agg.excluded_value).toBe(700);
-    expect(agg.account_count).toBe(3);
+    expect(agg.total).toBe(900); // 2*150 + 600; inactive hybrid is excluded
+    expect(agg.excluded_value).toBe(1300);
+    expect(agg.account_count).toBe(2);
     expect(agg.assetBreakdown.stocks).toBe(300);
     expect(agg.assetBreakdown.mutual_funds).toBe(600);
-    expect(agg.assetBreakdown.manual_portfolios).toBe(1300); // includes excluded reporting bucket
-    expect(agg.accounts.find(a=>a.account_id===3)?.warnings).toContain('hybrid_manual_residual_unavailable_holdings_authoritative');
+    expect(agg.assetBreakdown.other).toBe(1300); // includes excluded reporting bucket
+    expect(agg.accounts.find(a=>a.account_id===3)?.valuation_source).toBe('hybrid_holdings');
   });
   it('never uses future prices and marks missing historical price incomplete',async()=>{
     const agg=await getWealthAggregation(db({

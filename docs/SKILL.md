@@ -421,3 +421,24 @@ XIRR null behavior:
 Ranking rules:
 - Gainers and losers exclude holdings with missing current value.
 - Ranking ties are deterministic by value, asset name, account name, asset id, and account id.
+
+### Wealth Phase 9 manual and formula valuations
+
+Supported Wealth account types are `brokerage`, `mutual_fund`, `epf`, `nps`, `ppf`, `ssy`, `fixed_deposit`, `gold`, `bond`, `crypto`, and `other`. Supported asset types are `stock`, `mutual_fund`, `epf`, `nps`, `ppf`, `ssy`, `fixed_deposit`, `gold`, `bond`, `crypto`, `cash_equivalent`, and `other`.
+
+Valuation modes are `holdings`, `manual_snapshot`, `formula`, and `hybrid`. Holdings valuation uses investment transactions plus dated manual prices/NAVs. Manual snapshot valuation uses the latest `wealth_valuation_snapshots` row on or before the requested date. Formula valuation is available for fixed deposits and estimate-only PPF/SSY metadata when enough principal/rate/date information is supplied. Hybrid mode prefers complete holdings, then manual snapshots, then supported formula estimates, and returns readable warnings when fallback occurs.
+
+Snapshot APIs:
+- `GET /api/wealth/valuation-snapshots` with optional `account_id`, `asset_id`, `date_from`, `date_to`, and `latest_only` filters.
+- `GET /api/wealth/valuation-snapshots/latest` returns latest snapshots per account/asset pair.
+- `POST /api/wealth/valuation-snapshots` creates or explicitly corrects a same account/asset/date snapshot.
+- `PUT /api/wealth/valuation-snapshots/:id` updates a user-owned snapshot.
+- `DELETE /api/wealth/valuation-snapshots/:id` deletes a user-owned snapshot; historical net-worth snapshots keep already-calculated values.
+
+Snapshot precedence avoids double counting: asset-level holdings are authoritative for holdings mode; asset-level snapshots are aggregated before account-level snapshots; account-level snapshots are only used as aggregate values when asset-level values are absent; formula values are used only for formula mode or configured hybrid fallback. Accounts with `include_in_net_worth=false` or inactive accounts are excluded from aggregation.
+
+Fixed-deposit formulas support principal, annual interest rate, start date, maturity date, `simple`, `monthly`, `quarterly`, `half_yearly`, and `yearly` compounding, plus an optional maturity amount override. These are estimates only and not bank-authoritative. PPF/SSY formula behavior is a simple annual-compounding estimate only when sufficient metadata exists; otherwise manual valuation is required.
+
+Default stale valuation thresholds are: stocks and mutual funds with prices 7 days, EPF 120 days, NPS 45 days, PPF 120 days, SSY 120 days, formula fixed deposits not stale while metadata is valid, manual fixed deposits 120 days, gold 30 days, and other manual assets 90 days. `WEALTH_MANUAL_VALUATION_STALE_DAYS` can override the global fallback default.
+
+No automatic external integrations are provided for mutual-fund NAV, CAMS/KFintech, EPFO, NPS CRA, or market providers in this phase. Investment contributions, dividends, interest, and maturities do not automatically create Ledger movements; optional `movement_id` remains a reconciliation link only. Snapshot-only assets may show absolute gain but XIRR remains unavailable unless real dated cash flows and a terminal value exist.

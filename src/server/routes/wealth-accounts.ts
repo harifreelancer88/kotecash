@@ -37,6 +37,7 @@ function normalizeBody(body: any, partial = false) {
     out.currency = currency;
   }
   for (const f of ["institution", "account_number_masked", "notes"] as const) if (!partial || f in body) out[f] = optionalText(body[f]);
+  if (!partial || "metadata" in body) out.metadata = body.metadata == null || body.metadata === "" ? null : (typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata));
   for (const f of ["opened_at", "closed_at"] as const) if (!partial || f in body) {
     const v = optionalText(body[f]);
     if (v && !isDateOnly(v)) return { error: `Invalid ${f}` };
@@ -71,7 +72,7 @@ wealthAccounts.post("/", async (c: AppContext) => {
   if (await duplicateName(c, uid, v.name)) return c.json(bad("Active account name already exists"), 400);
   const opening = body.opening_value == null || body.opening_value === "" ? 0 : Number(body.opening_value);
   if (!Number.isFinite(opening) || opening < 0) return c.json(bad("Invalid opening_value"), 400);
-  const res = await c.env.DB.prepare(`INSERT INTO portfolios (user_id, name, value, account_type, institution, account_number_masked, currency, opened_at, include_in_net_worth, valuation_mode, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(uid, v.name, opening, v.account_type, v.institution, v.account_number_masked, v.currency, v.opened_at, v.include_in_net_worth, v.valuation_mode, v.notes).run();
+  const res = await c.env.DB.prepare(`INSERT INTO portfolios (user_id, name, value, account_type, institution, account_number_masked, currency, opened_at, include_in_net_worth, valuation_mode, notes, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(uid, v.name, opening, v.account_type, v.institution, v.account_number_masked, v.currency, v.opened_at, v.include_in_net_worth, v.valuation_mode, v.notes, v.metadata).run();
   await c.env.DB.prepare("INSERT INTO balance_history (user_id, entity_kind, entity_id, amount) VALUES (?, 'portfolio', ?, ?)").bind(uid, res.meta.last_row_id, opening).run();
   return c.json({ id: res.meta.last_row_id }, 201);
 });
