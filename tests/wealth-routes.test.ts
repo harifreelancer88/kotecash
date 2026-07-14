@@ -75,7 +75,7 @@ describe('wealth assets routes', () => {
     expect((await h.app.request('/api/wealth/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Dup', asset_type: 'stock', symbol: 'A', exchange: 'NSE' }) }, h.env)).status).toBe(400);
     h = harness(wealthAssets, '/api/wealth/assets', mockDB([{ match: 'SELECT * FROM investment_assets', first: { id: 2, name: 'A', asset_type: 'stock' } }]));
     expect((await h.app.request('/api/wealth/assets/2', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'B' }) }, h.env)).status).toBe(200);
-    h = harness(wealthAssets, '/api/wealth/assets', mockDB());
+    h = harness(wealthAssets, '/api/wealth/assets', mockDB([{ match: 'SELECT id, isin', first: { id: 3 } }, { match: 'CASE WHEN EXISTS', first: { has_transactions: 0, has_prices: 0 } }]));
     expect((await h.app.request('/api/wealth/assets/3', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'B' }) }, h.env)).status).toBe(404);
     expect((await h.app.request('/api/wealth/assets/3', { method: 'DELETE' }, h.env)).status).toBe(200);
     h = harness(wealthAssets, '/api/wealth/assets', mockDB([{ match: 'FROM investment_assets WHERE user_id=?', rows: [{ id: 1, name: 'Mine' }] }]));
@@ -105,5 +105,23 @@ describe('wealth transaction money convention', () => {
     expect(res.status).toBe(201);
     expect(inserted[0]).toContain(10000);
     expect(inserted[0].filter((v) => v === 10000)).toHaveLength(2);
+  });
+});
+
+describe('wealth asset safe deactivation', () => {
+  it('blocks referenced assets and allows unreferenced duplicate assets to deactivate', async () => {
+    let h = harness(wealthAssets, '/api/wealth/assets', mockDB([
+      { match: 'SELECT id, isin', first: { id: 1, isin: 'INE467B01029' } },
+      { match: 'CASE WHEN EXISTS', first: { has_transactions: 1, has_prices: 0 } },
+    ]));
+    let res = await h.app.request('/api/wealth/assets/1', { method: 'DELETE' }, h.env);
+    expect(res.status).toBe(400);
+    h = harness(wealthAssets, '/api/wealth/assets', mockDB([
+      { match: 'SELECT id, isin', first: { id: 2, isin: 'INE467B01029' } },
+      { match: 'CASE WHEN EXISTS', first: { has_transactions: 0, has_prices: 0 } },
+      { match: 'UPDATE investment_assets', run: { success: true, meta: { changes: 1 } } },
+    ]));
+    res = await h.app.request('/api/wealth/assets/2', { method: 'DELETE' }, h.env);
+    expect(res.status).toBe(200);
   });
 });

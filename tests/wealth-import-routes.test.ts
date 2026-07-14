@@ -138,3 +138,35 @@ describe('wealth import same-batch sequencing regression', () => {
     expect((sql.match(/INSERT INTO investment_transactions/g)||[])).toHaveLength(1);
   });
 });
+
+describe('wealth import duplicate/rollback metadata regressions', () => {
+  it('duplicate detection SQL ignores preview/rolled-back/failed history and requires surviving records', async () => {
+    const db = mockDB();
+    const h = harness(db);
+    const fd = new FormData();
+    fd.append('file', new File(['account_name,account_type,asset_name,asset_type,symbol,isin,transaction_type,trade_date,quantity,currency\nZerodha,brokerage,Chola,stock,CHOLAHLDNG,INE149A01033,buy,2026-04-01,1,INR\n'], 'one.csv', { type: 'text/csv' }));
+    fd.append('mapping', '{}');
+    fd.append('options', '{}');
+    await h.app.request('/api/wealth/imports/preview', { method: 'POST', body: fd }, h.env);
+    const sql = (db.prepare as any).mock.calls.map((c: any) => c[0]).join('\n');
+    expect(sql).toMatch(/JOIN wealth_import_batches/);
+    expect(sql).toMatch(/NOT IN \('rolled_back','uploaded','previewed','validated','failed'\)/);
+    expect(sql).toMatch(/EXISTS \(SELECT 1 FROM investment_transactions/);
+  });
+
+  it('rollback clears created IDs and remains idempotent for already rolled back batches', async () => {
+    let db = mockDB([
+      { match: 'SELECT * FROM wealth_import_batches', first: { id: 9, status: 'imported' } },
+      { match: 'SELECT COUNT(*) count FROM investment_transactions t', first: { count: 0 } },
+    ]);
+    let h = harness(db);
+    let res = await h.app.request('/api/wealth/imports/9/rollback', { method: 'POST' }, h.env);
+    expect(res.status).toBe(200);
+    let sql = (db.prepare as any).mock.calls.map((c: any) => c[0]).join('\n');
+    expect(sql).toMatch(/created_transaction_id=NULL, created_price_id=NULL/);
+    db = mockDB([{ match: 'SELECT * FROM wealth_import_batches', first: { id: 9, status: 'rolled_back' } }]);
+    h = harness(db);
+    res = await h.app.request('/api/wealth/imports/9/rollback', { method: 'POST' }, h.env);
+    expect(await res.json()).toMatchObject({ deleted_transactions: 0, deleted_prices: 0 });
+  });
+});

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { AppContext, Bindings, Variables } from "../types";
 import { ASSET_TYPES, PRICE_SOURCES, PRICING_MODES } from "../wealth/types";
+import { diagnoseAssetIdentifierAmbiguity } from "../wealth/imports";
 import { isEnumValue, normalizeCurrency, normalizeIdentifier, optionalText, parseQueryBoolean, requiredText } from "../wealth/validation";
 
 const wealthAssets = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -54,6 +55,18 @@ wealthAssets.get("/", async (c: AppContext) => {
   return c.json(res.results);
 });
 
+wealthAssets.get("/diagnostics/duplicates", async (c: AppContext) => {
+  const uid = c.get("userId");
+  const isin = normalizeIdentifier(c.req.query("isin"));
+  const scheme_code = normalizeIdentifier(c.req.query("scheme_code"));
+  const symbol = normalizeIdentifier(c.req.query("symbol"));
+  const exchange = normalizeIdentifier(c.req.query("exchange"));
+  const asset_type = optionalText(c.req.query("asset_type"));
+  if (!isin && !scheme_code && !(symbol && exchange && asset_type)) return c.json(bad("Identifier required"), 400);
+  const assets = await diagnoseAssetIdentifierAmbiguity(c, uid, { isin, scheme_code, symbol, exchange, asset_type });
+  return c.json({ ambiguous: assets.length > 1, assets });
+});
+
 wealthAssets.post("/", async (c: AppContext) => {
   const uid = c.get("userId"); const body = await c.req.json(); const n = normalize(body);
   if ("error" in n) return c.json(bad(n.error), 400); const v = n.value;
@@ -76,6 +89,12 @@ wealthAssets.put("/:id", async (c: AppContext) => {
 
 wealthAssets.delete("/:id", async (c: AppContext) => {
   const uid = c.get("userId"); const id = Number(c.req.param("id"));
+  const existing = await c.env.DB.prepare("SELECT id, isin, scheme_code, symbol, exchange, asset_type FROM investment_assets WHERE id=? AND user_id=?").bind(id, uid).first<any>();
+  if (!existing) return c.json(bad("Not found"), 404);
+  const usage = await c.env.DB.prepare(`SELECT
+    CASE WHEN EXISTS (SELECT 1 FROM investment_transactions WHERE user_id=? AND asset_id=?) THEN 1 ELSE 0 END has_transactions,
+    CASE WHEN EXISTS (SELECT 1 FROM investment_prices WHERE user_id=? AND asset_id=?) THEN 1 ELSE 0 END has_prices`).bind(uid, id, uid, id).first<any>();
+  if (usage?.has_transactions || usage?.has_prices) return c.json(bad("Asset is referenced by surviving transactions or prices and cannot be deactivated"), 400);
   const res = await c.env.DB.prepare("UPDATE investment_assets SET is_active=0, updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id, uid).run();
   if ((res.meta as any).changes === 0) return c.json(bad("Not found"), 404);
   return c.json({ success: true });
