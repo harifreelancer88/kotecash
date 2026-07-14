@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import type { AppContext, Bindings, Variables } from "../types";
-import { ASSET_TYPES, PRICE_SOURCES, PRICING_MODES } from "../wealth/types";
+import { ASSET_TYPES, PRICE_SOURCES, PRICING_MODES, VALUATION_MODES } from "../wealth/types";
 import { diagnoseAssetIdentifierAmbiguity } from "../wealth/imports";
 import { isEnumValue, normalizeCurrency, normalizeIdentifier, optionalText, parseQueryBoolean, requiredText } from "../wealth/validation";
 
 const wealthAssets = new Hono<{ Bindings: Bindings; Variables: Variables }>();
-const editable = ["asset_type", "name", "symbol", "isin", "exchange", "scheme_code", "currency", "price_source", "pricing_mode", "is_active", "notes"];
+const editable = ["asset_type", "name", "symbol", "isin", "exchange", "scheme_code", "currency", "price_source", "pricing_mode", "valuation_mode", "account_id", "is_active", "notes", "metadata"];
 function bad(error: string) { return { error }; }
 
 function normalize(body: any, partial = false) {
@@ -14,9 +14,12 @@ function normalize(body: any, partial = false) {
   if (!partial || "asset_type" in body) { const v = body.asset_type ?? "other"; if (!isEnumValue(ASSET_TYPES, v)) return { error: "Invalid asset_type" }; out.asset_type = v; }
   if (!partial || "price_source" in body) { const v = body.price_source ?? "manual"; if (!isEnumValue(PRICE_SOURCES, v)) return { error: "Invalid price_source" }; out.price_source = v; }
   if (!partial || "pricing_mode" in body) { const v = body.pricing_mode ?? "manual"; if (!isEnumValue(PRICING_MODES, v)) return { error: "Invalid pricing_mode" }; out.pricing_mode = v; }
+  if (!partial || "valuation_mode" in body) { const v = body.valuation_mode ?? null; if (v && !isEnumValue(VALUATION_MODES, v)) return { error: "Invalid valuation_mode" }; out.valuation_mode = v; }
   if (!partial || "currency" in body) { const c = normalizeCurrency(body.currency); if (!c) return { error: "Invalid currency" }; out.currency = c; }
   for (const f of ["symbol", "isin", "exchange", "scheme_code"] as const) if (!partial || f in body) out[f] = normalizeIdentifier(body[f]);
   if (!partial || "notes" in body) out.notes = optionalText(body.notes);
+  if (!partial || "metadata" in body) out.metadata = body.metadata == null || body.metadata === "" ? null : (typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata));
+  if (!partial || "account_id" in body) out.account_id = body.account_id == null || body.account_id === "" ? null : Number(body.account_id);
   if (!partial || "is_active" in body) out.is_active = body.is_active === false || body.is_active === 0 ? 0 : 1;
   return { value: out };
 }

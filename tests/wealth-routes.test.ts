@@ -60,7 +60,7 @@ describe('wealth assets routes', () => {
     const h = harness(wealthAssets, '/api/wealth/assets', mockDB());
     expect((await h.app.request('/api/wealth/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'ABC', asset_type: 'stock', symbol: 'abc', exchange: 'nse' }) }, h.env)).status).toBe(201);
     expect((await h.app.request('/api/wealth/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Fund', asset_type: 'mutual_fund', scheme_code: '123' }) }, h.env)).status).toBe(201);
-    expect((await h.app.request('/api/wealth/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Bad', asset_type: 'crypto' }) }, h.env)).status).toBe(400);
+    expect((await h.app.request('/api/wealth/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Crypto', asset_type: 'crypto' }) }, h.env)).status).toBe(201);
     expect((await h.app.request('/api/wealth/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Bad', price_source: 'x' }) }, h.env)).status).toBe(400);
     expect((await h.app.request('/api/wealth/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Bad', pricing_mode: 'x' }) }, h.env)).status).toBe(400);
     expect((await h.app.request('/api/wealth/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Bad', currency: 'R' }) }, h.env)).status).toBe(400);

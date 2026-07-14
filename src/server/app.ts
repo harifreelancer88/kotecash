@@ -24,6 +24,7 @@ import wealthImports from "./routes/wealth-imports";
 import wealthCutover from "./routes/wealth-cutover";
 import wealthAiImports from "./routes/wealth-ai-imports";
 import wealthMarketPrices from "./routes/wealth-market-prices";
+import wealthValuationSnapshots from "./routes/wealth-valuation-snapshots";
 
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 
@@ -131,6 +132,7 @@ app.route("/api/wealth/accounts", wealthAccounts);
 app.route("/api/wealth/assets", wealthAssets);
 app.route("/api/wealth/transactions", wealthTransactions);
 app.route("/api/wealth/prices", wealthPrices);
+app.route("/api/wealth/valuation-snapshots", wealthValuationSnapshots);
 app.route("/api/wealth/market-prices", wealthMarketPrices);
 app.route("/api/wealth/holdings", wealthHoldings);
 app.route("/api/wealth/performance", wealthPerformance);

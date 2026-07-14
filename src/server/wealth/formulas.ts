@@ -6,7 +6,7 @@ export type PriceInput = { asset_id: number; price_date: string; price: string }
 export type HoldingLot = { quantity: string; cost_basis: number; source_transaction_id?: number };
 export type HoldingResult = { quantity: string; lots: HoldingLot[]; remaining_cost_basis: number; average_cost: string | null; total_invested: number; realised_sale_proceeds: number; fifo_cost_disposed: number; realised_gain: number; latest_price?: string | null; latest_price_date?: string | null; current_value: number | null; unrealised_gain: number | null; total_gain: number | null; absolute_return_pct: number | null; stale_price: boolean; warnings: string[] };
 
-const buyTypes = new Set(['buy','sip','contribution','transfer_in']);
+const buyTypes = new Set(['buy','sip','contribution','employer_contribution','employee_contribution','transfer_in']);
 const sellTypes = new Set(['sell','redemption','withdrawal','transfer_out']);
 function amountCost(t: InvestmentTransactionInput) { return t.gross_amount ?? t.net_amount ?? (t.quantity && t.unit_price ? multiplyQuantityByPriceMinor(t.quantity, t.unit_price) : 0) + (t.charges ?? 0) + (t.taxes ?? 0); }
 function proceeds(t: InvestmentTransactionInput) { return t.net_amount ?? Math.max(0, (t.gross_amount ?? 0) - (t.charges ?? 0) - (t.taxes ?? 0)); }
@@ -23,7 +23,7 @@ export function calculateHolding(transactions: InvestmentTransactionInput[], pri
   const sorted = transactions.map((t, i) => ({...t, _i: i})).sort((a,b) => a.trade_date.localeCompare(b.trade_date) || ((a.id ?? a._i) - (b.id ?? b._i)));
   for (const t of sorted) {
     const type = t.transaction_type;
-    if (['buy','sip','contribution'].includes(type)) { const cost = amountCost(t); lots.push({ quantity: q(t), cost_basis: cost, source_transaction_id: t.id }); totalInvested += cost; }
+    if (['buy','sip','contribution','employer_contribution','employee_contribution'].includes(type)) { const cost = amountCost(t); lots.push({ quantity: q(t), cost_basis: cost, source_transaction_id: t.id }); totalInvested += cost; }
     else if (type === 'transfer_in') { const cost = amountCost(t); if (!cost) warnings.push('missing_cost_basis'); lots.push({ quantity: q(t), cost_basis: cost, source_transaction_id: t.id }); totalInvested += cost; }
     else if (type === 'bonus') lots.push({ quantity: q(t), cost_basis: 0, source_transaction_id: t.id });
     else if (type === 'split') { const mult = q(t); for (const lot of lots) lot.quantity = mulQ(lot.quantity, mult); }
