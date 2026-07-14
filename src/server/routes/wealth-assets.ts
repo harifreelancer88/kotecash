@@ -7,6 +7,11 @@ import { isEnumValue, normalizeCurrency, normalizeIdentifier, optionalText, pars
 const wealthAssets = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const editable = ["asset_type", "name", "symbol", "isin", "exchange", "scheme_code", "currency", "price_source", "pricing_mode", "valuation_mode", "account_id", "is_active", "notes", "metadata"];
 function bad(error: string) { return { error }; }
+function routeId(c: AppContext) {
+  const direct = Number(c.req.param("id"));
+  if (Number.isInteger(direct)) return direct;
+  return Number(new URL(c.req.url).pathname.match(/\/(\d+)\/(?:permanent|delete-check)$/)?.[1]);
+}
 
 function normalize(body: any, partial = false) {
   const out: any = {};
@@ -90,7 +95,45 @@ wealthAssets.put("/:id", async (c: AppContext) => {
   return c.json({ success: true });
 });
 
+async function assetDependencies(c: AppContext, uid: number, id: number) {
+  const row = await c.env.DB.prepare(`SELECT
+    (SELECT COUNT(*) FROM investment_transactions WHERE user_id=? AND asset_id=?) transactions,
+    (SELECT COUNT(*) FROM investment_prices WHERE user_id=? AND asset_id=?) prices,
+    (SELECT COUNT(*) FROM wealth_valuation_snapshots WHERE user_id=? AND asset_id=?) snapshots,
+    (SELECT COUNT(*) FROM wealth_import_rows WHERE user_id=? AND created_asset_id=?) import_rows,
+    (SELECT COUNT(*) FROM investment_transactions WHERE user_id=? AND asset_id=? AND import_batch_id IS NOT NULL) import_transactions,
+    (SELECT COUNT(*) FROM investment_prices WHERE user_id=? AND asset_id=? AND import_batch_id IS NOT NULL) import_prices,
+    (SELECT COUNT(*) FROM movements WHERE user_id=? AND ((src_kind='investment_asset' AND src_id=?) OR (dst_kind='investment_asset' AND dst_id=?))) movements,
+    (SELECT COUNT(*) FROM investment_transactions WHERE user_id=? AND asset_id=? AND transaction_type IN ('buy','sell','sip','transfer_in','transfer_out','bonus','split','contribution','employer_contribution','employee_contribution')) holdings`).bind(
+      uid, id, uid, id, uid, id, uid, id, uid, id, uid, id, uid, id, id, uid, id,
+    ).first<any>();
+  return Object.fromEntries(Object.entries(row || {}).map(([k, v]) => [k, Number(v || 0)]));
+}
+function canDelete(deps: Record<string, number>) { return Object.values(deps).every((v) => v === 0); }
+
+wealthAssets.get("/:id/delete-check", async (c: AppContext) => {
+  const uid = c.get("userId"); const id = routeId(c);
+  const existing = await c.env.DB.prepare("SELECT id FROM investment_assets WHERE id=? AND user_id=?").bind(id, uid).first<any>();
+  if (!existing) return c.json(bad("Not found"), 404);
+  const dependencies = await assetDependencies(c, uid, id);
+  return c.json({ can_delete: canDelete(dependencies), dependencies });
+});
+
+async function permanentDeleteAsset(c: AppContext) {
+  const uid = c.get("userId"); const id = routeId(c);
+  const existing = await c.env.DB.prepare("SELECT id FROM investment_assets WHERE id=? AND user_id=?").bind(id, uid).first<any>();
+  if (!existing) return c.json(bad("Not found"), 404);
+  const dependencies = await assetDependencies(c, uid, id);
+  if (!canDelete(dependencies)) return c.json({ can_delete: false, dependencies, error: "Asset has financial history and cannot be permanently deleted" }, 409);
+  const res = await c.env.DB.prepare("DELETE FROM investment_assets WHERE id=? AND user_id=?").bind(id, uid).run();
+  if ((res.meta as any).changes === 0) return c.json(bad("Not found"), 404);
+  return c.json({ success: true, can_delete: true, dependencies });
+}
+
+wealthAssets.delete("/:id/permanent", permanentDeleteAsset);
+
 wealthAssets.delete("/:id", async (c: AppContext) => {
+  if (new URL(c.req.url).pathname.endsWith("/permanent")) return permanentDeleteAsset(c);
   const uid = c.get("userId"); const id = Number(c.req.param("id"));
   const existing = await c.env.DB.prepare("SELECT id, isin, scheme_code, symbol, exchange, asset_type FROM investment_assets WHERE id=? AND user_id=?").bind(id, uid).first<any>();
   if (!existing) return c.json(bad("Not found"), 404);
