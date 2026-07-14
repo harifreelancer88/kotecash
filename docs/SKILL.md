@@ -366,3 +366,16 @@ Recalculates unlocked monthly snapshots only, creates missing rows, skips locked
 - `POST /api/wealth/ai-imports/:id/prepare` converts reviewed extraction data into the existing Wealth import preview format. The normal `/api/wealth/imports/:id/commit` endpoint remains the only commit path.
 
 OpenAI is extraction-only. The API key must be configured server-side as a Cloudflare secret named `OPENAI_API_KEY`; optional variables are `OPENAI_DOCUMENT_MODEL`, `OPENAI_MAX_FILE_BYTES`, `OPENAI_MAX_PAGES`, and `OPENAI_REQUEST_TIMEOUT_MS`. Never include the key in frontend JavaScript, docs examples, API responses, logs, or database rows.
+
+### Wealth market prices (Phase 7A)
+
+- `GET /api/wealth/market-prices/status` returns market-price provider readiness and counts for eligible stock assets. It does **not** call the provider.
+- `POST /api/wealth/market-prices/refresh` manually refreshes Indian stock prices for the authenticated user.
+  ```json
+  { "asset_ids": [1, 2, 3], "only_open_holdings": true, "force": false }
+  ```
+- Prices are end-of-day or delayed, not exchange-authorized realtime data. Twelve Data is currently supported through server-side configuration only: set `MARKET_DATA_PROVIDER=twelve_data` and a Cloudflare secret named `TWELVE_DATA_API_KEY`. Optional controls are `MARKET_DATA_TIMEOUT_MS`, `MARKET_DATA_MAX_SYMBOLS_PER_REFRESH`, and `MARKET_DATA_STALE_HOURS`.
+- Supported scope is active `stock` assets on `NSE` or `BSE` with deterministic uppercase symbol/exchange mapping. Mutual funds, retirement assets, fixed deposits, loans, manual assets, and inactive assets are skipped.
+- KoteCash does not scrape NSE/BSE websites, does not expose provider keys to frontend/API responses, and does not schedule automatic refreshes in Phase 7A.
+- Price precedence: use the latest valid price on or before the valuation date; never use future prices; same-date market refresh may correct a market-sourced price; same-date manual/import prices are protected unless explicit force behavior is used; missing prices make valuation incomplete rather than zero; closed holdings do not require current prices.
+- Request controls: refresh open holdings by default, deduplicate selected asset IDs, skip sufficiently fresh market prices, enforce the configured maximum asset count, apply timeout/retry-safe provider handling, and require one explicit user action.
