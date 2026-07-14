@@ -21,6 +21,7 @@ const migrations = [
   'db/migrations/0011_net_worth_snapshot_breakdown.sql',
   'db/migrations/0012_ai_document_extractions.sql',
   'db/migrations/0013_ai_extraction_status_fields.sql',
+  'db/migrations/0014_wealth_price_refresh_runs.sql',
 ];
 
 const headers = [

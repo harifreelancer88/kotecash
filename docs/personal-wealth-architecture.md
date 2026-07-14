@@ -910,3 +910,9 @@ After deploying the rolled-back duplicate detection and asset ambiguity fix, cle
 6. Re-preview the complete 56-row canonical CSV and confirm the preview reports 56 total, 56 valid, 0 invalid, and 0 duplicate before committing.
 
 Do not auto-merge duplicate assets and do not edit production data directly outside the Wealth Assets UI/API.
+
+## Phase 7A progress note — manual market price refresh
+
+Phase 7A adds a provider-neutral market-data boundary and a reusable Wealth market-price refresh service for manual Indian stock price updates. The initial adapter supports Twelve Data through server-side Cloudflare environment configuration, uses native `fetch`, and stores successful quotes in `investment_prices` with `source='market'` while preserving existing valuation semantics. Refreshes are explicit user actions only; no Cloudflare Cron, exchange scraping, mutual-fund NAV fetching, or realtime-feed claims are included in this phase.
+
+The refresh API is mounted at `POST /api/wealth/market-prices/refresh`, with status metadata at `GET /api/wealth/market-prices/status`. Audit summaries are persisted in `wealth_price_refresh_runs` without API keys, raw payloads, or full provider URLs.
