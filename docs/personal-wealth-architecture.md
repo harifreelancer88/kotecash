@@ -897,3 +897,16 @@ Order-level preprocessing can aggregate execution rows by trade date, order id, 
 The OpenAI integration is a server-only structured extractor. Raw financial files are sent to OpenAI only after the user requests extraction, and no financial records are added until the user reviews the extraction, prepares an import preview, and separately confirms the existing import commit. Raw file bytes are not retained; stored audit data is limited to file hash, masked metadata, extraction JSON, validation results, model/response identifiers, and usage metadata. Supported initial files are PDF, PNG, JPG/JPEG, text/plain, and explicitly selected CSV layout interpretation. The model is configured with `OPENAI_DOCUMENT_MODEL`; the API key is provided only through the Cloudflare secret `OPENAI_API_KEY`.
 
 Current limitations: extraction supports only holdings statements, broker tradebooks, broker contract notes, and unknown documents as generic structured proposals. It does not fetch market prices, create tax reports, commit bank/credit-card/EPF/NPS data, ingest email, batch process documents, handle password-protected PDFs, deploy production changes, or apply remote migrations.
+
+## KoteCash Wealth import duplicate asset cleanup guidance
+
+After deploying the rolled-back duplicate detection and asset ambiguity fix, clean up duplicate active TCS assets manually through the application only:
+
+1. Open **Wealth → Assets**.
+2. Search for **TCS** or ISIN **INE467B01029**.
+3. Identify duplicate active assets returned for the same ISIN.
+4. Preserve the asset referenced by surviving transactions, prices, or opening holdings.
+5. Deactivate only the unreferenced duplicate asset; the backend blocks deactivation when surviving transactions or prices reference the asset.
+6. Re-preview the complete 56-row canonical CSV and confirm the preview reports 56 total, 56 valid, 0 invalid, and 0 duplicate before committing.
+
+Do not auto-merge duplicate assets and do not edit production data directly outside the Wealth Assets UI/API.

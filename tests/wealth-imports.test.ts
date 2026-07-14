@@ -36,3 +36,14 @@ describe('wealth account resolver explicit account_id', () => {
     await expect(resolveAccount(ctx, 1, { account_id: 9 }, {})).resolves.toMatchObject({ id: 9, name: 'Zerodha' });
   });
 });
+
+describe('wealth asset ambiguity diagnostics', () => {
+  it('reports duplicate active ISIN metadata and makes resolver fail clearly', async () => {
+    const rows = [
+      { id: 10, name: 'TCS', symbol: 'TCS', isin: 'INE467B01029', has_transactions: 1, has_prices: 0, has_open_holdings: 1 },
+      { id: 11, name: 'TCS duplicate', symbol: 'TCS', isin: 'INE467B01029', has_transactions: 0, has_prices: 0, has_open_holdings: 0 },
+    ];
+    const ctx = { env: { DB: { prepare: () => ({ bind: () => ({ all: async () => ({ results: rows }), first: async () => null, run: async () => ({ success: true, meta: {} }) }) }) } } } as any;
+    await expect(resolveAsset(ctx, 1, { isin: 'INE467B01029', asset_name: 'TCS', asset_type: 'stock', currency: 'INR' })).rejects.toThrow(/Ambiguous active assets for ISIN INE467B01029/);
+  });
+});
