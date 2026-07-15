@@ -606,3 +606,66 @@ Debt-payoff goals link liabilities and report starting debt, current outstanding
 
 ### Deletion safeguards
 Deleting a goal with links or contributions cancels it and returns a dependency report. Permanent deletion is only allowed when no links, contributions, historical references, or import references exist. Linked accounts, assets, liabilities, movements, and investment transactions are never deleted by goal deletion.
+
+## PennyWise SMS integration APIs
+
+KoteCash exposes a reviewable PennyWise ingestion surface under `/api/integrations/pennywise`. All endpoints require the existing KoteCash authentication model: browser session cookies or `Authorization: Bearer kote_...` API tokens. API tokens are never returned after creation and must not be logged by clients.
+
+### Preview approved candidates
+
+`POST /api/integrations/pennywise/preview`
+
+Use this before sync to validate user-reviewed SMS transactions and surface duplicate warnings. Preview never creates movements or sync records.
+
+Request body:
+
+```json
+{
+  "client_id": "stable-device-or-app-id",
+  "transactions": [
+    {
+      "client_transaction_id": "stable-local-id",
+      "sms_fingerprint": "stable-normalized-hash",
+      "transaction_date": "2026-07-15",
+      "transaction_time": "10:30:00",
+      "amount": 1250,
+      "direction": "expense",
+      "wallet_id": 1,
+      "category_id": 2,
+      "merchant": "Swiggy",
+      "description": "UPI payment to Swiggy",
+      "reference_number": "ref-123",
+      "source": "sms",
+      "metadata": { "sms_sender": "ICICIB" }
+    }
+  ]
+}
+```
+
+Responses include per-row `normalized_direction`, `duplicate_status`, `validation_issues`, `supported`, `proposed_movement`, and `warnings`.
+
+### Sync reviewed transactions
+
+`POST /api/integrations/pennywise/movements`
+
+Creates ordinary Ledger movements only for rows the Android user has approved. Batch size is limited to 100 transactions and rows are processed independently. Successful rows are not rolled back when another row fails.
+
+Per-row statuses are `created`, `already_synced`, `possible_duplicate`, `validation_failed`, `mapping_missing`, and `server_error`. Retries are safe because KoteCash checks existing records by `(user_id, client_id, client_transaction_id)`, `sms_fingerprint`, and a normalized financial fingerprint made from date, amount, direction, wallet, reference number, and merchant.
+
+Movement semantics:
+
+- `expense`: creates one movement from the mapped wallet to outside KoteCash.
+- `income`: creates one movement from outside KoteCash to the mapped wallet.
+- `transfer`: creates a wallet-to-wallet movement only when both wallet mappings are supplied.
+- Failed SMS notifications, investment SMS, OTPs, promotions, balance-only alerts, and non-financial messages do not create Ledger movements.
+- PennyWise sync does not create Wealth transactions or liability payments automatically. Credit-card payments and loan EMI SMS can be represented only as ordinary Ledger movements according to explicit mappings, then linked or corrected later in KoteCash.
+
+### Reconcile sync status
+
+`GET /api/integrations/pennywise/status`
+
+Optional query filters: `client_transaction_id`, `sms_fingerprint`, `from`, `to`, and `sync_status`. Use this after network timeouts to reconcile whether KoteCash already created a movement.
+
+### Security and storage constraints
+
+Clients must send normalized fields, stable hashes, and masked account identifiers only. KoteCash rejects raw SMS body fields and stores no API tokens, secrets, or raw SMS text in `pennywise_sync_records`. Wallets and categories are ownership-validated for the authenticated user.
