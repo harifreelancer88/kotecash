@@ -10,7 +10,7 @@ var M = {
   income: 0, expense: 0, net: 0, savingsRate: 0, dti: 0,
   wallets: [], creditCards: [], deposits: [], portfolios: [],
   cicilan: [], txns: [], networth: [], goals: [], earmarks: [],
-  budgets: [], expenseCats: [], incomeCats: [],
+  budgets: [], budgetSummary: [], cashFlow: {}, cashFlowCategories: [], cashFlowAlerts: [], recurringCandidates: [], expenseCats: [], incomeCats: [],
   recurring: [], liabilities: [], liabilitySummary: {},
   dashboard: {},
 };
@@ -80,11 +80,11 @@ async function loadAll() {
     api("/api/categories"), api("/api/wallets"), api("/api/credit-cards"),
     api("/api/deposits"), api("/api/portfolios"), api("/api/cicilan"),
     api("/api/goals"), api("/api/budgets"), api("/api/transactions"),
-    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"), api("/api/liabilities"), api("/api/liabilities/summary"),
+    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"), api("/api/liabilities"), api("/api/liabilities/summary"), api("/api/budgets/summary"), api("/api/cash-flow/monthly"), api("/api/cash-flow/categories"), api("/api/cash-flow/alerts"), api("/api/cash-flow/recurring-candidates"),
   ]);
   var cats = data[0], wallets = data[1], ccs = data[2], deps = data[3],
     ports = data[4], cics = data[5], goals = data[6], buds = data[7],
-    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {}, liabilities = data[13] || {}, liabilitySummary = data[14] || {};
+    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {}, liabilities = data[13] || {}, liabilitySummary = data[14] || {}, budgetSummary = data[15] || [], cashFlow = data[16] || {}, cashFlowCategories = data[17] || [], cashFlowAlerts = data[18] || [], recurringCandidates = data[19] || [];
 
   cats.forEach(function (c) { CATMAP[c.name] = c.id; });
   M.expenseCats = cats.filter(function (c) { return c.type === "expense"; }).map(function (c) { return c.name; });
@@ -133,7 +133,7 @@ async function loadAll() {
   });
 
   M.budgets = buds.map(function (b) {
-    return { id: b.id, cat: b.category_name, budget: b.budget_amount, actual: b.actual };
+    return { id: b.id, cat: b.category_name, budget: b.effective_budget || b.budget_amount, actual: b.actual_spending ?? b.actual, status: b.status, projected: b.projected_month_end_spending, safe: b.daily_safe_to_spend, used: b.used_percentage, remaining: b.remaining_amount };
   });
 
   M.txns = txns.map(function (t) {
@@ -141,7 +141,7 @@ async function loadAll() {
   });
 
   M.income = dash.income; M.expense = dash.expense; M.net = dash.sisa;
-  M.savingsRate = dash.savingsRate; M.dti = dash.dti; M.dashboard = dash || {};
+  M.savingsRate = cashFlow.savings_rate ?? dash.savingsRate; M.dti = dash.dti; M.dashboard = dash || {}; M.budgetSummary = budgetSummary; M.cashFlow = cashFlow; M.cashFlowCategories = cashFlowCategories; M.cashFlowAlerts = cashFlowAlerts; M.recurringCandidates = recurringCandidates;
 
   M.networth = ((nws.snapshots && nws.snapshots.length) ? nws.snapshots.slice().reverse() : (nw.snapshots || [])).map(function (s) {
     var br = s.breakdown || {};
@@ -514,27 +514,29 @@ function catIdByName(name) { return CATMAP[name]; }
 
 /* ── BUDGETS ── */
 function renderBudgets() {
-  var rows = M.budgets.map(function (b) {
-    var rem = b.budget - b.actual;
-    var st = budgetBadge(b.actual, b.budget);
-    var pctUsed = b.budget > 0 ? Math.min(b.actual / b.budget * 100, 100) : 0;
-    var barColor = pctUsed > 100 ? "var(--c-danger)" : pctUsed > 90 ? "var(--c-warning)" : "var(--c-focus)";
-    return '<div class="card p-4 mb-2">' +
-      '<div class="flex items-center justify-between gap-2 mb-2">' +
-        '<span class="text-sm font-medium min-w-0 truncate">' + esc(b.cat) + "</span>" +
-        '<span class="' + st[1] + ' flex items-center gap-1 flex-shrink-0"><i data-lucide="' + st[2] + '" class="w-3 h-3"></i> ' + st[0] + "</span>" +
-      "</div>" +
-      '<div style="height:6px;border-radius:3px;margin-bottom:8px;background:var(--c-bg);"><div style="height:6px;border-radius:3px;width:' + pctUsed + "%;background:" + barColor + ';"></div></div>' +
-      '<div class="flex items-center justify-between gap-2 text-[11px] flex-wrap">' +
-        '<span class="mono" style="color:var(--c-sub);">Rp' + fmt(b.actual) + " / Rp" + fmt(b.budget) + "</span>" +
-        '<span class="mono font-medium ' + (rem < 0 ? "text-[#C44B4B]" : "text-[#4A8C6F]") + '">' + (rem < 0 ? "−Rp" + fmt(Math.abs(rem)) + " over" : "Rp" + fmt(rem) + " left") + "</span>" +
-      "</div>" +
-      '<div class="flex justify-end mt-2"><button class="p-1" style="color:var(--c-sub);background:none;border:none;cursor:pointer;" onclick="deleteBudget(' + b.id + ')"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div>' +
-    "</div>";
-  }).join("");
-  return '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Budgets</h1><p class="page-subtitle">Set and track monthly spending limits per category</p>' +
-    '<div class="flex items-center justify-between gap-2 mb-4"><span class="text-sm" style="color: var(--c-sub);">' + curMonthLabel() + '</span><button class="btn-primary px-3 py-1.5 rounded-lg text-xs" onclick="showSetBudget()">Set Budget</button></div>' +
-    (rows || '<div class="card-row"><span class="text-xs" style="color:var(--c-sub);">No budgets set</span></div>');
+  var tab = new URLSearchParams(window.location.search).get("budgetTab") || "overview";
+  var tabs = [["overview","Overview"],["categories","Category Budgets"],["cashflow","Cash Flow"],["recurring","Recurring"],["alerts","Alerts"],["trends","Trends"]].map(function(t){return '<a class="btn btn-sm '+(tab===t[0]?'btn-primary':'')+'" href="/?page=budgets&budgetTab='+t[0]+'" data-page="budgets" onclick="event.preventDefault(); var u=new URL(location.href); u.searchParams.set(\'page\',\'budgets\'); u.searchParams.set(\'budgetTab\',\''+t[0]+'\'); history.pushState({page:\'budgets\'},\'\',u); navigate(\'budgets\',false);">'+t[1]+'</a>';}).join('');
+  var cf = M.cashFlow || {}; var totalRemaining = M.budgets.reduce(function(s,b){return s+(b.remaining||0);},0); var topAlert = (M.cashFlowAlerts||[])[0];
+  var cards = '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">' +
+    '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Monthly income</div><div class="font-bold mono">Rp'+fmt(cf.total_income)+'</div></div>'+
+    '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Monthly expenses</div><div class="font-bold mono">Rp'+fmt(cf.total_expenses)+'</div></div>'+
+    '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Savings rate</div><div class="font-bold mono">'+(cf.savings_rate==null?'—':pct(cf.savings_rate))+'</div></div>'+
+    '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Budget remaining</div><div class="font-bold mono">Rp'+fmt(totalRemaining)+'</div></div>'+
+    '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Projected result</div><div class="font-bold mono">Rp'+fmt(cf.projected_month_end_surplus_or_deficit)+'</div></div>'+
+    '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Investment contributions</div><div class="font-bold mono">Rp'+fmt(cf.investment_contributions)+'</div></div>'+
+    '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Debt payments</div><div class="font-bold mono">Rp'+fmt(cf.debt_payments)+'</div></div>'+
+    '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Safe to spend/day</div><div class="font-bold mono">Rp'+fmt(M.budgets.reduce(function(s,b){return s+(b.safe||0);},0))+'</div></div></div>';
+  var budgetRows = M.budgets.map(function (b) { var rem = b.remaining ?? (b.budget-b.actual); var pctUsed = b.budget > 0 ? Math.min((b.actual / b.budget) * 100, 100) : 0; return '<tr><td class="p-2">'+esc(b.cat||'Total')+'</td><td class="p-2 text-right mono">Rp'+fmt(b.budget)+'</td><td class="p-2 text-right mono">Rp'+fmt(b.actual)+'</td><td class="p-2 text-right mono">Rp'+fmt(rem)+'</td><td class="p-2"><div style="min-width:120px;height:8px;background:var(--c-bg);border-radius:4px"><div style="height:8px;width:'+pctUsed+'%;background:var(--c-focus);border-radius:4px"></div></div></td><td class="p-2">'+esc(b.status||'')+'</td><td class="p-2 text-right"><button class="btn btn-xs" onclick="deleteBudget('+b.id+')">Archive</button></td></tr>'; }).join('');
+  var catRows = (M.cashFlowCategories||[]).map(function(c){return '<tr><td class="p-2">'+esc(c.category_name)+'</td><td class="p-2 text-right mono">Rp'+fmt(c.current_month_spending)+'</td><td class="p-2 text-right mono">Rp'+fmt(c.previous_month_spending)+'</td><td class="p-2 text-right mono">'+(c.change_percentage==null?'—':pct(c.change_percentage))+'</td><td class="p-2 text-right mono">Rp'+fmt(c.three_month_average)+'</td><td class="p-2 text-right mono">'+(c.budget_used_percentage==null?'—':pct(c.budget_used_percentage))+'</td></tr>';}).join('');
+  var alerts = (M.cashFlowAlerts||[]).map(function(a){return '<div class="card p-3 mb-2"><div class="flex justify-between gap-2"><b>'+esc(a.title)+'</b><span class="badge">'+esc(a.severity)+'</span></div><p class="text-xs mt-1" style="color:var(--c-sub)">'+esc(a.explanation)+'</p></div>';}).join('') || '<div class="card p-3 text-xs">No alerts.</div>';
+  var rec = (M.recurringCandidates||[]).map(function(r){return '<tr><td class="p-2">'+esc(r.merchant)+'</td><td class="p-2">'+esc(r.frequency)+'</td><td class="p-2 text-right mono">Rp'+fmt(r.typical_amount)+'</td><td class="p-2">'+esc(r.next_expected_date)+'</td><td class="p-2 text-right">'+Math.round((r.confidence||0)*100)+'%</td></tr>';}).join('');
+  var body = tab==='categories' ? '<div class="flex justify-end mb-2"><button class="btn-primary px-3 py-2 rounded-lg text-xs" onclick="showSetBudget()">Add budget</button></div><div style="overflow-x:auto"><table class="w-full text-xs" style="min-width:720px"><thead><tr><th class="p-2 text-left">Category</th><th class="p-2 text-right">Budget</th><th class="p-2 text-right">Actual</th><th class="p-2 text-right">Remaining</th><th class="p-2">Progress</th><th class="p-2">Status</th><th></th></tr></thead><tbody>'+ (budgetRows||'<tr><td class="p-3" colspan="7">No budgets.</td></tr>') +'</tbody></table></div>' :
+    tab==='cashflow' ? cards + '<div class="card p-4"><div class="section-title">Category breakdown</div><div style="overflow-x:auto"><table class="w-full text-xs" style="min-width:700px"><tbody>'+catRows+'</tbody></table></div></div>' :
+    tab==='recurring' ? '<div class="card p-4"><div class="section-title">Detected candidates require confirmation before becoming recurring items</div><div style="overflow-x:auto"><table class="w-full text-xs" style="min-width:560px"><tbody>'+ (rec||'<tr><td class="p-3">No candidates.</td></tr>') +'</tbody></table></div></div>' :
+    tab==='alerts' ? alerts :
+    tab==='trends' ? '<div class="card p-4"><div class="section-title">Trends</div><p class="text-xs" style="color:var(--c-sub)">Monthly trend data is served by /api/cash-flow/trends. Use the Cash Flow and Category tabs for the mobile-readable summaries.</p></div>' :
+    cards + (topAlert ? '<div class="card p-3 mb-4 text-xs" style="background:rgba(212,162,78,.10)"><b>'+esc(topAlert.title)+':</b> '+esc(topAlert.explanation)+'</div>' : '') + '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4"><div class="card p-4"><div class="section-title">Budget progress</div><div style="overflow-x:auto"><table class="w-full text-xs" style="min-width:620px"><tbody>'+budgetRows+'</tbody></table></div></div><div class="card p-4"><div class="section-title">Top spending categories</div><div style="overflow-x:auto"><table class="w-full text-xs" style="min-width:520px"><tbody>'+catRows+'</tbody></table></div></div></div>';
+  return '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Budget</h1><p class="page-subtitle">Monthly budgets, cash flow, recurring spend, trends, and explainable alerts.</p><div class="flex gap-2 mb-4 overflow-x-auto pb-1">'+tabs+'</div>'+body;
 }
 function curMonthLabel() {
   var d = new Date(); var m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return m[d.getMonth()] + " " + d.getFullYear();
@@ -1000,7 +1002,7 @@ function showSetBudget() {
 }
 async function saveBudget() {
   var amt = parseInt(document.getElementById("sbAmt").value) || 0; if (!amt) return;
-  try { await api("/api/budgets", { method: "POST", body: { category_id: catId(document.getElementById("sbCat").value), budget_amount: amt, month: document.getElementById("sbMonth").value } }); closeModal(); await reload("budgets"); toast("Saved"); } catch (e) { toast(e.message, true); }
+  try { await api("/api/budgets", { method: "POST", body: { category_id: catId(document.getElementById("sbCat").value), amount: amt, budget_amount: amt, month: document.getElementById("sbMonth").value, budget_type: "monthly_category" } }); closeModal(); await reload("budgets"); toast("Saved"); } catch (e) { toast(e.message, true); }
 }
 async function deleteBudget(id) {
   if (!confirm("Delete this budget?")) return;

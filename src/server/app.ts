@@ -12,7 +12,9 @@ import cicilan from "./routes/cicilan";
 import tokens from "./routes/tokens";
 import networth from "./routes/networth";
 import { creditCards, deposits, portfolios } from "./routes/misc";
-import { categories, budgets, earmarks } from "./routes/manage";
+import { categories, earmarks } from "./routes/manage";
+import budgets from "./routes/budgets";
+import cashFlow from "./routes/cash-flow";
 import wealthAccounts from "./routes/wealth-accounts";
 import wealthAssets from "./routes/wealth-assets";
 import wealthTransactions from "./routes/wealth-transactions";
@@ -154,6 +156,7 @@ app.route("/api/goal-links", goalLinks);
 app.route("/api/goal-contributions", goalContributions);
 app.route("/api/categories", categories);
 app.route("/api/budgets", budgets);
+app.route("/api/cash-flow", cashFlow);
 app.route("/api/earmarks", earmarks);
 app.route("/api/integrations/pennywise", pennywise);
 

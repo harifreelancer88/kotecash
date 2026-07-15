@@ -1,0 +1,11 @@
+import { Hono } from 'hono';
+import type { AppContext, Bindings, Variables } from '../types';
+import { currentMonth } from '../types';
+import { alerts, categoryAnalytics, monthlyCashFlow, recurringCandidates } from '../budget-service';
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+app.get('/monthly', async (c:AppContext)=> c.json(await monthlyCashFlow(c.env.DB,c.get('userId'),c.req.query('month')||currentMonth())));
+app.get('/categories', async (c:AppContext)=> c.json(await categoryAnalytics(c.env.DB,c.get('userId'),c.req.query('month')||currentMonth())));
+app.get('/alerts', async (c:AppContext)=> c.json(await alerts(c.env.DB,c.get('userId'),c.req.query('month')||currentMonth())));
+app.get('/recurring-candidates', async (c:AppContext)=> c.json(await recurringCandidates(c.env.DB,c.get('userId'))));
+app.get('/trends', async (c:AppContext)=>{ const from=c.req.query('date_from')||`${new Date().getUTCFullYear()}-01`; const to=c.req.query('date_to')||currentMonth(); const months=[]; let d=new Date(Date.UTC(Number(from.slice(0,4)),Number(from.slice(5,7))-1,1)); const end=new Date(Date.UTC(Number(to.slice(0,4)),Number(to.slice(5,7))-1,1)); while(d<=end){ const m=d.toISOString().slice(0,7); months.push(await monthlyCashFlow(c.env.DB,c.get('userId'),m)); d.setUTCMonth(d.getUTCMonth()+1); } return c.json({grouping:c.req.query('grouping')||'month',results:months}); });
+export default app;
