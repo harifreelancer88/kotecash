@@ -198,8 +198,11 @@ function sourceTypeAndId(name) {
 function catId(name) { return CATMAP[name]; }
 
 // ── router ───────────────────────────────────────────────────────
+var PAGE_ALIASES = { reconciliation: "reconcile", settings: "api", accounts: "wealth", holdings: "wealth", performance: "wealth", valuations: "wealth", prices: "wealth", transactions: "wealth" };
+var WEALTH_PAGE_TAB_ALIASES = { accounts: "accounts", holdings: "holdings", performance: "performance", valuations: "valuations", prices: "prices", transactions: "transactions" };
 function pageFromUrl() {
-  return new URLSearchParams(window.location.search).get("page") || "dashboard";
+  var page = new URLSearchParams(window.location.search).get("page") || "dashboard";
+  return PAGE_ALIASES[page] || page;
 }
 
 function navigate(id, push) {
@@ -363,12 +366,15 @@ function renderIncome() {
     '<section class="card p-4 text-sm" style="color:var(--c-sub);">Backend-only calculations classify reimbursements, refunds, loan proceeds, transfers, and investment redemptions out of ordinary income. Matching links existing Ledger credits and never creates duplicate movements.</section>';
 }
 
+function smallMetric(label, value, extra, tone){
+  return '<div class="card dashboard-metric '+(tone||'')+' p-3 min-w-0"><div class="flex items-center gap-2 text-[12px] font-semibold" style="color:var(--c-sub);"><span aria-hidden="true">•</span><span>'+label+'</span></div><div class="dashboard-value text-lg font-extrabold mono break-words mt-2" style="color:var(--c-ink);">'+value+'</div>'+(extra?'<div class="text-[12px] mt-1 leading-snug" style="color:var(--c-sub);">'+extra+'</div>':'')+'</div>';
+}
+
 function renderDashboard() {
   var fo = M.financialOverview;
   if (!fo) return '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Home</h1><div class="card p-4">Dashboard data is loading.</div>';
   var nw = fo.net_worth || {}, cf = fo.cash_flow || {}, we = fo.wealth || {}, li = fo.liabilities || {}, go = fo.goals || {}, bu = fo.budgets || {}, al = fo.alerts || {}, im = fo.imports || {}, pw = fo.pennywise || {}, hh = fo.health || {};
   function money(v){ return v == null ? '—' : (v < 0 ? '-' + fmtMoney(Math.abs(v)) : fmtMoney(v)); }
-  function smallMetric(label, value, extra, tone){ return '<div class="card dashboard-metric '+(tone||'')+' p-3 min-w-0"><div class="flex items-center gap-2 text-[12px] font-semibold" style="color:var(--c-sub);"><span aria-hidden="true">•</span><span>'+label+'</span></div><div class="dashboard-value text-lg font-extrabold mono break-words mt-2" style="color:var(--c-ink);">'+value+'</div>'+(extra?'<div class="text-[12px] mt-1 leading-snug" style="color:var(--c-sub);">'+extra+'</div>':'')+'</div>'; }
   function action(label,path,icon){ return '<a class="quick-action-tile" href="'+path+'" data-page="'+((path.match(/page=([^&]+)/)||[])[1]||'dashboard')+'" aria-label="'+esc(label)+'"><i data-lucide="'+icon+'" class="w-4 h-4" aria-hidden="true"></i><span>'+label+'</span></a>'; }
   function statusPill(s){ var c=s==='good'?'var(--c-success)':s==='attention'?'var(--c-danger)':s==='watch'?'var(--c-warning)':'var(--c-sub)'; return '<span class="text-[10px] px-2 py-1 rounded-full" style="background:rgba(53,88,114,.06);color:'+c+';">'+esc(s||'unavailable')+'</span>'; }
   var trend = (nw.trend||[]).slice(-6); var max = Math.max.apply(null, trend.map(function(t){return Math.abs(t.net_worth||0);}).concat([1]));
@@ -383,7 +389,7 @@ function renderDashboard() {
     '<section class="mb-4"><div class="flex items-center justify-between mb-2"><h2 class="section-title" style="margin:0;">Income</h2><a class="btn btn-sm min-h-[44px]" href="/?page=income" data-page="income">Open Income</a></div><div class="grid dashboard-two-col grid-cols-2 md:grid-cols-4 gap-2">'+smallMetric('Actual income', money((M.incomeSummary||{}).actual_income))+smallMetric('Expected income', money((M.incomeSummary||{}).expected_income))+smallMetric('Variance', money((M.incomeSummary||{}).income_variance))+smallMetric('Next credit', ((M.incomeSummary||{}).next_expected_credit||{}).expected_date||'—')+'</div></section>'+
     '<section class="mb-4"><div class="flex items-center justify-between mb-2"><h2 class="section-title" style="margin:0;">Needs Attention</h2><a class="btn btn-sm min-h-[44px]" href="/?page=budgets&budgetTab=alerts" data-page="budgets">View all alerts</a></div>'+attention+'</section>'+
     '<section class="mb-4"><h2 class="section-title">Quick Actions</h2><div class="grid dashboard-two-col grid-cols-2 md:grid-cols-4 gap-2">'+action('Add transaction','/?page=ledger','plus')+action('Review PennyWise','/?page=pennywise','message-square')+action('Add valuation','/?page=wealth','line-chart')+action('Add liability payment','/?page=liabilities','landmark')+action('Add goal contribution','/?page=goals','target')+action('Import statement','/?page=imports','upload')+action('Generate snapshot','/?page=networth','camera')+'</div></section>'+
-    '<section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">'+smallMetric('Wealth', money(we.current_investment_value), 'Gain/loss '+money(we.total_gain_loss)+' · XIRR '+(we.xirr==null?'—':pct(we.xirr)))+smallMetric('Liabilities', money(li.total_outstanding), 'Monthly EMI '+money(li.monthly_emi_commitment)+' · overdue '+money(li.overdue_amount))+smallMetric('Goals', fmt(go.active_goals||0)+' active', (go.goals_behind||0)+' behind · monthly '+money(go.monthly_contribution_required))+smallMetric('Budget', bu.used_percentage==null?'—':pct(bu.used_percentage/100), 'Remaining '+money(bu.remaining_budget)+' · alerts '+((bu.exceeded_categories||[]).length+(bu.approaching_limit_categories||[]).length))+'</section>'+
+    '<section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">'+smallMetric('Wealth', money(we.current_investment_value), 'Market '+money(we.market_holdings_value)+' · Other '+money(we.other_investment_value))+smallMetric('Liabilities', money(li.total_outstanding), 'Monthly EMI '+money(li.monthly_emi_commitment)+' · overdue '+money(li.overdue_amount))+smallMetric('Goals', fmt(go.active_goals||0)+' active', (go.goals_behind||0)+' behind · monthly '+money(go.monthly_contribution_required))+smallMetric('Budget', bu.used_percentage==null?'—':pct(bu.used_percentage/100), 'Remaining '+money(bu.remaining_budget)+' · alerts '+((bu.exceeded_categories||[]).length+(bu.approaching_limit_categories||[]).length))+'</section>'+
     '<section class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4"><div><h2 class="section-title">Upcoming</h2>'+upcoming+'</div><div><h2 class="section-title">Recent Activity</h2>'+activity+'</div></section>'+
     '<section class="mb-4"><h2 class="section-title">Data Health</h2><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">'+healthCards+'</div><div class="card p-3 mt-2 text-xs" style="color:var(--c-sub);">Imports unresolved: '+fmt(im.unresolved_rows||0)+' · PennyWise failed: '+fmt(pw.failed_sync_count||0)+' · Partial sections: '+(fo.meta&&fo.meta.partial?'yes':'no')+'</div></section></div>';
 }
@@ -401,8 +407,8 @@ function ledgerRowHTML(t) {
       '<span class="text-[10px] flex-shrink-0 hidden sm:inline" style="color:var(--c-sub);width:48px;">' + esc(t.method || "") + "</span>" +
       '<span class="mono text-[11px] text-right flex-shrink-0 font-medium ' + amtColor + '" style="width:105px;">' + amt + "</span>" +
       '<span class="hidden md:flex gap-1 flex-shrink-0">' +
-        '<button class="p-1" style="color:var(--c-sub);" onclick="editTransaction(' + t.id + ')"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>' +
-        '<button class="p-1" style="color:var(--c-sub);" onclick="deleteTransaction(' + t.id + ')"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>' +
+        '<button class="p-1" aria-label="Edit ledger transaction" title="Edit ledger transaction" style="color:var(--c-sub);" onclick="editTransaction(' + t.id + ')"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>' +
+        '<button class="p-1" aria-label="Delete ledger transaction" title="Delete ledger transaction" style="color:var(--c-sub);" onclick="deleteTransaction(' + t.id + ')"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>' +
       "</span>" +
     "</div>";
   // Mobile: 2-line stacked row
@@ -417,7 +423,7 @@ function ledgerRowHTML(t) {
         (t.method ? '<span>·</span><span>' + esc(t.method) + "</span>" : "") +
         (t.source === "pennywise_sms" ? '<span>·</span><span style="color:var(--c-primary);">PennyWise SMS</span>' : "") +
         "<span>·</span><span class='mono'>" + (t.date || "") + "</span>" +
-        '<button class="ml-auto p-1 flex-shrink-0" style="color:var(--c-sub);" onclick="toggleLedgerDropdown(this)"><i data-lucide="ellipsis-vertical" class="w-4 h-4"></i></button>' +
+        '<button class="ml-auto p-1 flex-shrink-0" aria-label="Open ledger transaction actions" title="Transaction actions" style="color:var(--c-sub);" onclick="toggleLedgerDropdown(this)"><i data-lucide="ellipsis-vertical" class="w-4 h-4"></i></button>' +
       "</div>" +
       '<div class="ledger-dropdown" style="display:none;position:absolute;right:4px;top:38px;background:var(--c-card);border:1px solid var(--c-border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(53,88,114,0.10);z-index:30;padding:4px;min-width:120px;">' +
         '<button class="flex items-center gap-2 w-full px-3 py-2 rounded text-xs hover:bg-[rgba(53,88,114,0.05)]" style="color:var(--c-ink);" onclick="editTransaction(' + t.id + ')"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Edit</button>' +
@@ -519,7 +525,7 @@ function initStatsCharts() {
 /* ── CATEGORIES ── */
 function renderCategories() {
   function row(name, id) {
-    return '<div class="flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-[#F7F8F0] text-sm"><span>' + esc(name) + '</span><button class="p-1" style="color:var(--c-sub);" onclick="deleteCategory(' + id + ')"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div>';
+    return '<div class="flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-[#F7F8F0] text-sm"><span>' + esc(name) + '</span><button class="p-1" aria-label="Delete category ' + esc(name) + '" title="Delete category ' + esc(name) + '" style="color:var(--c-sub);" onclick="deleteCategory(' + id + ')"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div>';
   }
   return '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Categories</h1>' +
     '<p class="page-subtitle">Manage your income and expense categories</p>' +
@@ -537,6 +543,7 @@ function memberOptions(selId){ return (M.householdMembers||[]).map(function(m){ 
 function renderFamily(){
   var tab = new URLSearchParams(window.location.search).get('familyTab') || 'household';
   var hs = M.householdSummary || {}; var members = hs.member_wise_net_worth || [];
+  function money(v){ return v == null ? '—' : fmtMoney(v); }
   function t(id,label){ return '<a class="btn btn-sm min-h-[40px] '+(tab===id?'btn-primary':'')+'" href="/?page=family&familyTab='+id+'" data-page="family">'+label+'</a>'; }
   var tabs='<div class="flex gap-2 overflow-x-auto pb-2 mb-4">'+t('household','Household')+t('members','Members')+t('ownership','Ownership')+t('expenses','Shared Expenses')+t('summary','Member Summary')+'</div>';
   var body='';
@@ -643,7 +650,7 @@ function renderCicilan() {
       return '<tr style="font-size:11px;"><td class="p-1">' + r.label + '</td><td class="p-1 text-right mono">' + fmtMoney(r.payment) + '</td><td class="p-1 text-right mono">' + fmtMoney(r.principal) + '</td><td class="p-1 text-right mono">' + fmtMoney(r.interest) + '</td><td class="p-1 text-right mono">' + fmtMoney(r.remaining) + "</td></tr>";
     }).join("");
     return '<div class="card p-5 mb-3" onclick="toggleCicilan(this)" style="cursor:pointer;">' +
-      '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;min-height:40px;"><div><h3 class="font-semibold">' + esc(c.name) + ' <button onclick="event.stopPropagation();showEditCicilan(' + idx + ')" style="background:none;border:none;cursor:pointer;color:var(--c-sub);font-size:11px;margin-left:4px;"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button> <span style="font-size:10px;color:var(--c-sub);">click for schedule</span></h3><p class="text-xs" style="color: var(--c-sub);">Active · ' + monthsLeft + " months remaining</p></div>" +
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;min-height:40px;"><div><h3 class="font-semibold">' + esc(c.name) + ' <button aria-label="Edit loan ' + esc(c.name) + '" title="Edit loan" onclick="event.stopPropagation();showEditCicilan(' + idx + ')" style="background:none;border:none;cursor:pointer;color:var(--c-sub);font-size:11px;margin-left:4px;"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button> <span style="font-size:10px;color:var(--c-sub);">click for schedule</span></h3><p class="text-xs" style="color: var(--c-sub);">Active · ' + monthsLeft + " months remaining</p></div>" +
       '<span class="mono text-lg font-bold flex-shrink-0" style="color: var(--c-primary);">' + fmtMoney(c.sisa) + "</span></div>" +
       '<div style="height:6px;border-radius:3px;margin-bottom:16px;background:var(--c-bg);"><div style="height:6px;border-radius:3px;width:' + pctPaid + "%;background:var(--c-focus);\"></div></div>" +
       '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs"><div><span style="color: var(--c-sub);">Monthly</span><br><span class="mono">' + fmtMoney(c.monthly) + '</span></div><div><span style="color: var(--c-sub);">Interest</span><br><span class="mono">' + c.bunga + '%</span></div><div><span style="color: var(--c-sub);">Due Date</span><br><span class="mono">' + (c.due || "").slice(0, 10) + '</span></div><div><span style="color: var(--c-sub);">Total</span><br><span class="mono">' + fmtMoney(c.total) + "</span></div></div>" +

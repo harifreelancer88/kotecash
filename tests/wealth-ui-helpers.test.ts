@@ -14,6 +14,10 @@ describe('wealth UI helpers', () => {
   it('formats decimal quantities safely', () => {
     expect(H.qty('12.345678901')).toBe('12.3456789');
   });
+  it('formats unit prices with sensible display precision', () => {
+    expect(H.price('517.849976')).toBe('₹517.85');
+    expect(H.price('1234.5')).toBe('₹1,234.50');
+  });
   it('has the split helper label', () => {
     expect(H.splitHelp()).toBe('Enter 2 for a 2-for-1 split.');
   });

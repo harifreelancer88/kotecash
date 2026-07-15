@@ -5,6 +5,7 @@ import { Script, createContext } from 'node:vm';
 function context() {
   const c = createContext({
     Intl, Number, String, Math,
+    URLSearchParams,
     document: { addEventListener() {}, getElementById() { return null; }, querySelectorAll() { return []; } },
     window: { addEventListener() {}, location: { href: '', search: '' }, history: { pushState() {} }, scrollTo() {} },
     console, fetch() { throw new Error('not called'); },
@@ -57,5 +58,41 @@ describe('premium dashboard rendering', () => {
     expect(html).toContain('No dated items in the next 30 days.');
     expect(html).toContain('No recent activity.');
     expect(html).toContain('aria-label="Notifications"');
+  });
+
+  it('renders Family tabs without leaking the dashboard helper scope', () => {
+    const c = context();
+    c.M.householdSummary = {
+      household: { name: 'Default household', household_type: 'family' },
+      household_net_worth: 1210874,
+      total_assets: 1310874,
+      total_liabilities: 100000,
+      joint_assets: 0,
+      joint_liabilities: 0,
+      shared_household_value: 0,
+      member_wise_net_worth: [
+        { member: { id: 1, display_name: 'Self', relationship: 'self' }, member_net_worth: 1210874, member_assets: 1310874, member_liabilities: 100000, goals: [] },
+      ],
+      unallocated_records: [],
+      ownership_warnings: [],
+    };
+    expect(() => c.renderFamily()).not.toThrow();
+    const household = c.renderFamily();
+    expect(household).toContain('Default household');
+    c.window.location.search = '?page=family&familyTab=summary';
+    expect(c.renderFamily()).toContain('Self');
+  });
+
+  it('maps safe route aliases to existing renderers and wealth tabs', () => {
+    const c = context();
+    c.window.location.search = '?page=reconciliation';
+    expect(c.pageFromUrl()).toBe('reconcile');
+    c.window.location.search = '?page=settings';
+    expect(c.pageFromUrl()).toBe('api');
+    c.window.location.search = '?page=holdings';
+    expect(c.pageFromUrl()).toBe('wealth');
+    expect(c.WEALTH_PAGE_TAB_ALIASES.holdings).toBe('holdings');
+    c.window.location.search = '?page=definitely-missing';
+    expect(c.pageFromUrl()).toBe('definitely-missing');
   });
 });
