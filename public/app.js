@@ -205,6 +205,7 @@ function navigate(id, push) {
   if (id === "api") loadTokens();
   if (id === "pennywise" && !M._pennywiseLoaded) loadPennyWiseSummary();
   if (id === "wealth" && window.WealthRouter) window.WealthRouter.load();
+  if (id === "imports") setTimeout(loadImportsPage,0);
   // update sidebar/mobile active
   document.querySelectorAll("[data-page]").forEach(function (el) {
     el.classList.toggle("active", el.getAttribute("data-page") === id);
@@ -249,9 +250,41 @@ function renderPage(id) {
     case "api": return renderAPI();
     case "pennywise": return renderPennyWise();
     case "wealth": return window.renderWealthApp ? window.renderWealthApp() : "<p>Loading wealth…</p>";
+    case "imports": return renderImports();
     case "wealth-import": return window.renderWealthImport ? window.renderWealthImport() : "<p>Loading wealth import…</p>";
     default: return "<p>Page not found.</p>";
   }
+}
+
+
+function renderImports() {
+  return '<div class="space-y-4 imports-page">' +
+    '<div><h1 class="text-2xl font-bold">Imports</h1><p class="text-sm text-[var(--c-sub)]">Upload, map, preview, reconcile, commit, and roll back reviewed statement CSV imports.</p></div>' +
+    '<div class="grid md:grid-cols-6 grid-cols-2 gap-2">' + ['Upload','Mapping','Preview','Reconciliation','History','Templates'].map(function(t){return '<span class="badge">'+t+'</span>';}).join('') + '</div>' +
+    '<div class="card p-4 space-y-3"><h2 class="font-semibold">Upload CSV</h2>' +
+      '<div class="grid md:grid-cols-3 gap-3"><select id="importType" class="select select-bordered"><option value="bank_statement">Bank statement</option><option value="credit_card_statement">Credit card</option><option value="loan_statement">Loan statement</option><option value="mutual_fund_statement">Mutual fund</option><option value="epf_statement">EPF</option><option value="nps_statement">NPS</option><option value="generic_ledger">Generic CSV</option></select><input id="importInstitution" class="input input-bordered" placeholder="Institution"><input id="importFile" type="file" accept=".csv,text/csv" class="file-input file-input-bordered"></div>' +
+      '<button class="btn btn-primary" onclick="uploadStatementImport()">Upload for review</button><div id="importUploadResult" class="text-sm"></div></div>' +
+    '<div class="grid lg:grid-cols-2 gap-4"><div class="card p-4"><h2 class="font-semibold mb-2">History</h2><div id="importHistory">Loading…</div></div><div class="card p-4"><h2 class="font-semibold mb-2">Templates</h2><div id="importTemplates">Loading…</div></div></div>' +
+    '<div class="card p-4"><h2 class="font-semibold mb-2">Mobile-first safeguards</h2><p class="text-sm text-[var(--c-sub)]">Rows are reviewed as stacked cards on small screens; duplicate and low-confidence matches require explicit user decisions before commit.</p></div>' +
+  '</div>';
+}
+async function loadImportsPage(){
+  if(currentPage!=="imports") return;
+  try{
+    var h=await api('/api/imports');
+    var el=document.getElementById('importHistory');
+    if(el) el.innerHTML=(h.batches||[]).map(function(b){return '<div class="p-2 border-b border-[var(--c-border)]"><b>'+b.source_filename+'</b><div class="text-xs text-[var(--c-sub)]">'+b.import_type+' • '+b.status+' • created '+(b.committed_count||0)+' • dup '+(b.duplicate_count||0)+' • errors '+(b.error_count||0)+'</div></div>';}).join('') || '<p class="text-sm text-[var(--c-sub)]">No imports yet.</p>';
+    var t=await api('/api/import-templates');
+    var te=document.getElementById('importTemplates');
+    if(te) te.innerHTML=(t.templates||[]).slice(0,8).map(function(x){return '<div class="p-2 border-b border-[var(--c-border)]"><b>'+x.name+'</b><div class="text-xs text-[var(--c-sub)]">'+x.import_type+' • '+(x.institution||'Generic')+'</div></div>';}).join('');
+  }catch(e){ var el=document.getElementById('importHistory'); if(el) el.textContent=e.message; }
+}
+async function uploadStatementImport(){
+  var f=document.getElementById('importFile').files[0]; if(!f) return toast('Choose a CSV file');
+  var fd=new FormData(); fd.append('file',f); fd.append('import_type',document.getElementById('importType').value); fd.append('source_institution',document.getElementById('importInstitution').value||'');
+  var res=await fetch('/api/imports/upload',{method:'POST',credentials:'include',body:fd}); var data=await res.json();
+  document.getElementById('importUploadResult').textContent=res.ok ? ('Batch '+data.batch_id+' uploaded. Suggested mapping: '+JSON.stringify(data.suggested_mapping)) : (data.error||'Upload failed');
+  loadImportsPage();
 }
 
 // ── modal ────────────────────────────────────────────────────────

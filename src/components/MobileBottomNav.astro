@@ -11,7 +11,8 @@ import {
   Calculator,
   Key,
   Target,
-  RefreshCw
+  RefreshCw,
+  Upload
 } from 'lucide-astro';
 
 const url = new URL(Astro.request.url);
@@ -36,6 +37,7 @@ const moreItems = [
   { id: 'cicilan', label: 'Cicilan', icon: CreditCard },
   { id: 'creditcard', label: 'Cards', icon: CreditCard },
   { id: 'recurring', label: 'Recurring', icon: RefreshCw },
+  { id: 'imports', label: 'Imports', icon: Upload },
   { id: 'account', label: 'Account', icon: Tags },
   { id: 'api', label: 'API & AI', icon: Key },
 ];
