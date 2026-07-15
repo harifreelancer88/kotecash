@@ -11,13 +11,16 @@ app.get("/", async (c: AppContext) => {
   const category = c.req.query("category");
   const type = c.req.query("type");
 
-  let sql = "SELECT * FROM movements WHERE user_id = ?";
+  let sql = `SELECT m.*, p.sync_status as pennywise_sync_status, p.reference_number as pennywise_reference_number
+             FROM movements m
+             LEFT JOIN pennywise_sync_records p ON p.user_id=m.user_id AND p.movement_id=m.id
+             WHERE m.user_id = ?`;
   const args: (string | number)[] = [uid];
-  if (search) { sql += " AND description LIKE ?"; args.push(`%${search}%`); }
-  if (category && category !== "all") { sql += " AND category_id=?"; args.push(Number(category)); }
-  if (type === "income") sql += " AND src_kind IS NULL";
-  if (type === "expense") sql += " AND dst_kind IS NULL";
-  sql += " ORDER BY date DESC, id DESC";
+  if (search) { sql += " AND m.description LIKE ?"; args.push(`%${search}%`); }
+  if (category && category !== "all") { sql += " AND m.category_id=?"; args.push(Number(category)); }
+  if (type === "income") sql += " AND m.src_kind IS NULL";
+  if (type === "expense") sql += " AND m.dst_kind IS NULL";
+  sql += " ORDER BY m.date DESC, m.id DESC";
 
   const res = await c.env.DB.prepare(sql).bind(...args).all<any>();
   const out = res.results.map((m: any) => ({
@@ -29,6 +32,9 @@ app.get("/", async (c: AppContext) => {
     payment_method: null,
     type: m.src_kind === null ? "income" : "expense",
     cicilan_id: m.dst_kind === "cicilan" ? m.dst_id : null,
+    source: m.pennywise_sync_status ? "pennywise_sms" : null,
+    sync_status: m.pennywise_sync_status ?? null,
+    reference_number: m.pennywise_reference_number ?? null,
   }));
   return c.json(out);
 });

@@ -137,7 +137,7 @@ async function loadAll() {
   });
 
   M.txns = txns.map(function (t) {
-    return { id: t.id, date: t.date, cat: nameById(CATMAP, t.category_id), desc: t.description, amount: t.amount, method: t.payment_method, type: t.type, category_id: t.category_id };
+    return { id: t.id, date: t.date, cat: nameById(CATMAP, t.category_id), desc: t.description, amount: t.amount, method: t.payment_method, type: t.type, category_id: t.category_id, source: t.source, sync_status: t.sync_status, reference_number: t.reference_number };
   });
 
   M.income = dash.income; M.expense = dash.expense; M.net = dash.sisa;
@@ -203,6 +203,7 @@ function navigate(id, push) {
   if (id === "scenarios") { initScenarioChart(); updateScenario(); }
   if (id === "account") loadAccountInfo();
   if (id === "api") loadTokens();
+  if (id === "pennywise" && !M._pennywiseLoaded) loadPennyWiseSummary();
   if (id === "wealth" && window.WealthRouter) window.WealthRouter.load();
   // update sidebar/mobile active
   document.querySelectorAll("[data-page]").forEach(function (el) {
@@ -246,6 +247,7 @@ function renderPage(id) {
     case "goals": return renderGoals();
     case "account": return renderAccount();
     case "api": return renderAPI();
+    case "pennywise": return renderPennyWise();
     case "wealth": return window.renderWealthApp ? window.renderWealthApp() : "<p>Loading wealth…</p>";
     case "wealth-import": return window.renderWealthImport ? window.renderWealthImport() : "<p>Loading wealth import…</p>";
     default: return "<p>Page not found.</p>";
@@ -376,7 +378,7 @@ function ledgerRowHTML(t) {
     '<div class="card-row ledger-row hidden md:flex">' +
       '<span class="mono text-[11px] flex-shrink-0" style="color:var(--c-sub);width:68px;">' + (t.date || "") + "</span>" +
       '<span class="text-[11px] font-medium flex-shrink-0" style="width:60px;">' + esc(t.cat || "?") + "</span>" +
-      '<span class="text-[11px] flex-1 truncate" style="color:var(--c-sub);min-width:0;">' + esc(t.desc || "") + "</span>" +
+      '<span class="text-[11px] flex-1 truncate" style="color:var(--c-sub);min-width:0;">' + esc(t.desc || "") + (t.source === "pennywise_sms" ? ' <span class="px-1.5 py-0.5 rounded-full" style="background:rgba(122,170,206,.16);color:var(--c-primary);">PennyWise SMS</span>' : '') + (t.reference_number ? ' <span class="mono">' + esc(t.reference_number) + '</span>' : '') + "</span>" +
       '<span class="text-[10px] flex-shrink-0 hidden sm:inline" style="color:var(--c-sub);width:48px;">' + esc(t.method || "") + "</span>" +
       '<span class="mono text-[11px] text-right flex-shrink-0 font-medium ' + amtColor + '" style="width:105px;">' + amt + "</span>" +
       '<span class="hidden md:flex gap-1 flex-shrink-0">' +
@@ -394,6 +396,7 @@ function ledgerRowHTML(t) {
       '<div class="flex items-center gap-1.5 text-[11px] min-w-0" style="color:var(--c-sub);">' +
         "<span>" + esc(t.cat || "?") + "</span>" +
         (t.method ? '<span>·</span><span>' + esc(t.method) + "</span>" : "") +
+        (t.source === "pennywise_sms" ? '<span>·</span><span style="color:var(--c-primary);">PennyWise SMS</span>' : "") +
         "<span>·</span><span class='mono'>" + (t.date || "") + "</span>" +
         '<button class="ml-auto p-1 flex-shrink-0" style="color:var(--c-sub);" onclick="toggleLedgerDropdown(this)"><i data-lucide="ellipsis-vertical" class="w-4 h-4"></i></button>' +
       "</div>" +
@@ -892,6 +895,18 @@ function renderGoals() {
 }
 
 /* ── API & AI ── */
+
+function renderPennyWise() {
+  var s = M._pennywise || { enabled: true, counts: [], clients: [], recent_errors: [] };
+  var counts = {}; (s.counts || []).forEach(function (r) { counts[r.sync_status] = r.count; });
+  var clientRows = (s.clients || []).map(function (c) { return '<tr><td class="p-2 mono text-xs">' + esc(c.client_id) + '</td><td class="p-2 text-xs">' + esc(c.last_seen_at || '—') + '</td><td class="p-2 text-right mono">' + fmt(c.records) + '</td></tr>'; }).join('');
+  var errorRows = (s.recent_errors || []).map(function (e) { return '<div class="card-row"><span class="mono text-xs">' + esc(e.client_transaction_id) + '</span><span class="text-xs flex-1" style="color:var(--c-danger);">' + esc(e.error_code || '') + ' ' + esc(e.error_message || '') + '</span><span class="text-[10px]" style="color:var(--c-sub);">' + esc(e.updated_at || '') + '</span></div>'; }).join('');
+  return '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">PennyWise Integration</h1><p class="page-subtitle">Reviewable SMS sync from PennyWise Android. API tokens are managed on API & AI and are never shown here.</p>' +
+    '<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5"><div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Enabled</div><div class="font-bold">' + (s.enabled ? 'Yes' : 'No') + '</div></div><div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Received</div><div class="font-bold mono">' + fmt(Object.keys(counts).reduce(function(a,k){return a+Number(counts[k]||0);},0)) + '</div></div><div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Created</div><div class="font-bold mono">' + fmt(counts.created || counts.already_synced || 0) + '</div></div><div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Duplicates</div><div class="font-bold mono">' + fmt(counts.possible_duplicate || 0) + '</div></div><div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Failed</div><div class="font-bold mono">' + fmt(counts.validation_failed || counts.mapping_missing || counts.server_error || 0) + '</div></div></div>' +
+    '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4"><div class="card p-5"><div class="section-title">Connected client IDs</div><table class="w-full text-sm"><tbody>' + (clientRows || '<tr><td class="p-2 text-xs" style="color:var(--c-sub);">No clients yet</td></tr>') + '</tbody></table></div><div class="card p-5"><div class="section-title">Recent sync errors</div>' + (errorRows || '<div class="text-xs" style="color:var(--c-sub);">No recent errors</div>') + '</div></div>';
+}
+async function loadPennyWiseSummary() { try { M._pennywise = await api('/api/integrations/pennywise/summary'); M._pennywiseLoaded = true; var pc = document.getElementById('pageContent'); if (currentPage === 'pennywise' && pc) { pc.innerHTML = renderPennyWise(); if (window.lucide) lucide.createIcons(); } } catch(e) { toast(e.message, true); } }
+
 function renderAPI() {
   var endpoints = [
     ["GET", "/api/dashboard", "Current month totals, health, budgets, cicilan"],
@@ -900,6 +915,9 @@ function renderAPI() {
     ["GET", "/api/cicilan", "List all active installments"],
     ["GET", "/api/budgets", "Current month budgets with progress"],
     ["GET", "/api/net-worth", "Net worth time-series"],
+    ["POST", "/api/integrations/pennywise/preview", "Preview PennyWise SMS transactions without creating movements"],
+    ["POST", "/api/integrations/pennywise/movements", "Idempotently create approved Ledger movements from PennyWise"],
+    ["GET", "/api/integrations/pennywise/status", "Reconcile PennyWise sync status by local IDs, fingerprints, dates, or status"],
   ];
   var apiCards = endpoints.map(function (e) {
     return '<div class="flex flex-col gap-1 py-2.5" style="border-bottom:1px solid rgba(53,88,114,0.04);"><div class="flex items-center gap-2 flex-wrap"><span class="px-1.5 py-0.5 rounded text-white font-mono" style="font-size: 10px; background: var(--c-primary);">' + e[0] + '</span><span class="mono text-xs break-all">' + e[1] + '</span></div><div class="text-xs" style="color: var(--c-sub);">' + e[2] + "</div></div>";
