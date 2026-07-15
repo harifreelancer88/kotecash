@@ -25,6 +25,9 @@ import wealthCutover from "./routes/wealth-cutover";
 import wealthAiImports from "./routes/wealth-ai-imports";
 import wealthMarketPrices from "./routes/wealth-market-prices";
 import wealthValuationSnapshots from "./routes/wealth-valuation-snapshots";
+import liabilities from "./routes/liabilities";
+import liabilityPayments from "./routes/liability-payments";
+import liabilityBalanceSnapshots from "./routes/liability-balance-snapshots";
 
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 
@@ -141,6 +144,9 @@ app.route("/api/wealth/imports", wealthImports);
 app.route("/api/wealth/cutover", wealthCutover);
 app.route("/api/wealth/ai-import", wealthAiImports);
 app.route("/api/wealth/ai-imports", wealthAiImports);
+app.route("/api/liabilities", liabilities);
+app.route("/api/liability-payments", liabilityPayments);
+app.route("/api/liability-balance-snapshots", liabilityBalanceSnapshots);
 app.route("/api/categories", categories);
 app.route("/api/budgets", budgets);
 app.route("/api/earmarks", earmarks);

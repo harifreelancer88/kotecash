@@ -11,7 +11,7 @@ var M = {
   wallets: [], creditCards: [], deposits: [], portfolios: [],
   cicilan: [], txns: [], networth: [], goals: [], earmarks: [],
   budgets: [], expenseCats: [], incomeCats: [],
-  recurring: [],
+  recurring: [], liabilities: [], liabilitySummary: {},
   dashboard: {},
 };
 
@@ -80,11 +80,11 @@ async function loadAll() {
     api("/api/categories"), api("/api/wallets"), api("/api/credit-cards"),
     api("/api/deposits"), api("/api/portfolios"), api("/api/cicilan"),
     api("/api/goals"), api("/api/budgets"), api("/api/transactions"),
-    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"),
+    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"), api("/api/liabilities"), api("/api/liabilities/summary"),
   ]);
   var cats = data[0], wallets = data[1], ccs = data[2], deps = data[3],
     ports = data[4], cics = data[5], goals = data[6], buds = data[7],
-    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {};
+    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {}, liabilities = data[13] || {}, liabilitySummary = data[14] || {};
 
   cats.forEach(function (c) { CATMAP[c.name] = c.id; });
   M.expenseCats = cats.filter(function (c) { return c.type === "expense"; }).map(function (c) { return c.name; });
@@ -148,6 +148,8 @@ async function loadAll() {
     return { id: s.id, month: s.month || s.snapshot_month, snapshot_date: s.snapshot_date, assets: s.assets_total ?? s.assets, liabilities: s.liabilities_total ?? s.liabilities, netWorth: s.net_worth ?? s.netWorth, investments_total: s.investments_total ?? br.assets?.investments, cash_total: s.cash_total, other_assets_total: s.other_assets_total, assetBreakdown: s.assetBreakdown || br.assets || {}, liabilityBreakdown: s.liabilityBreakdown || br.liabilities || {}, valuation_complete: s.valuation_complete, valuation_status: s.valuation_status, locked: s.locked, warnings: s.warnings || br.health?.warnings || [] };
   });
   M.networthAnalytics = nws.analytics || {};
+  M.liabilities = liabilities.liabilities || [];
+  M.liabilitySummary = liabilitySummary || {};
 
   M.recurring = (recur || []).map(function (r) {
     return {
@@ -234,6 +236,7 @@ function renderPage(id) {
     case "categories": return renderCategories();
     case "budgets": return renderBudgets();
     case "cicilan": return renderCicilan();
+    case "liabilities": return renderLiabilities();
     case "recurring": return renderRecurring();
     case "networth": return renderNetWorth();
     case "scenarios": return renderScenarios();
@@ -555,6 +558,30 @@ function cicilanSchedule(c) {
   }
   return rows;
 }
+
+function renderLiabilities() {
+  var s = M.liabilitySummary || {};
+  var rows = (M.liabilities || []).map(function (l) {
+    var cc = l.liability_type === "credit_card";
+    return '<div class="card p-4 mb-3">' +
+      '<div class="flex items-start justify-between gap-3"><div><div class="font-semibold">' + esc(l.name) + '</div><div class="text-xs" style="color:var(--c-sub);">' + esc(l.institution || l.liability_type) + ' · ' + esc(l.due_status || 'no_due_date') + '</div></div><div class="text-right"><div class="mono font-bold">Rp' + fmt(l.current_outstanding) + '</div><div class="text-[10px]" style="color:var(--c-sub);">' + esc(l.auto_calculation_mode) + '</div></div></div>' +
+      '<div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div>EMI<br><span class="mono">Rp' + fmt(l.emi_amount || l.minimum_due) + '</span></div><div>Rate<br><span class="mono">' + (l.interest_rate || 0) + '%</span></div><div>Due<br><span class="mono">' + esc(l.next_due_date || l.due_date || '—') + '</span></div><div>' + (cc ? 'Utilization' : 'Progress') + '<br><span class="mono">' + (cc && l.utilization_percentage != null ? l.utilization_percentage.toFixed(1) + '%' : (l.original_principal ? ((l.original_principal - l.current_outstanding) / l.original_principal * 100).toFixed(1) + '%' : '—')) + '</span></div></div>' +
+      '<div class="mt-3 flex flex-wrap gap-2"><button class="btn-secondary px-3 py-2 rounded-lg text-xs" onclick="showLiabilityPayment(' + l.id + ')">Record payment</button><button class="btn-secondary px-3 py-2 rounded-lg text-xs" onclick="showLiabilitySnapshot(' + l.id + ')">Add balance snapshot</button><button class="btn-secondary px-3 py-2 rounded-lg text-xs" onclick="showLiabilitySchedule(' + l.id + ')">Schedule</button></div></div>';
+  }).join('');
+  return '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Liabilities</h1><p class="page-subtitle">Loans, credit cards, EMI tracking, payments, and balance reconciliation.</p>' +
+    '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"><div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Total outstanding</div><div class="font-bold mono">Rp' + fmt(s.total_outstanding) + '</div></div><div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Monthly EMI</div><div class="font-bold mono">Rp' + fmt(s.monthly_emi_commitment) + '</div></div><div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Overdue</div><div class="font-bold mono">Rp' + fmt(s.overdue_amount) + '</div></div><div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Active</div><div class="font-bold mono">' + fmt(s.active_liability_count) + '</div></div></div>' +
+    '<div class="flex justify-end mb-4"><button class="btn-primary px-4 py-3 rounded-lg text-sm" onclick="showAddLiability()">Add Liability</button></div>' +
+    '<div class="flex gap-2 overflow-x-auto mb-4 text-xs"><span class="px-3 py-2 rounded-full card">Overview</span><span class="px-3 py-2 rounded-full card">Loans</span><span class="px-3 py-2 rounded-full card">Credit Cards</span><span class="px-3 py-2 rounded-full card">Payments</span><span class="px-3 py-2 rounded-full card">Schedule</span><span class="px-3 py-2 rounded-full card">Balance History</span></div>' +
+    (rows || '<div class="card-row"><span class="text-xs" style="color:var(--c-sub);">No liabilities yet</span></div>');
+}
+function showAddLiability(){ openModal('Add Liability', '<div style="display:flex;flex-direction:column;gap:12px;">' + fld('liType','Type',sel(['home_loan','personal_loan','vehicle_loan','education_loan','gold_loan','business_loan','credit_card','bnpl','informal_loan','other'].map(function(x){return opt(x,x.replace(/_/g,' '));}).join(''))) + fld('liName','Name',inp('text')) + fld('liInstitution','Institution',inp('text')) + '<div class="grid grid-cols-2 gap-3">' + fld('liPrincipal','Original principal / limit',inp('number')) + fld('liOutstanding','Current outstanding',inp('number')) + '</div><div class="grid grid-cols-2 gap-3">' + fld('liRate','Interest rate %',inp('number')) + fld('liEmi','EMI / minimum due',inp('number')) + '</div><div class="grid grid-cols-2 gap-3">' + fld('liStart','Start date',inp('date')) + fld('liDue','Next due date',inp('date')) + '</div>' + saveBtn('Save Liability','saveLiability()') + '</div>'); }
+async function saveLiability(){ var type=document.getElementById('liType').value; var principal=parseInt(document.getElementById('liPrincipal').value)||0; var body={liability_type:type,name:document.getElementById('liName').value,institution:document.getElementById('liInstitution').value,original_principal: type==='credit_card'?0:principal,credit_limit:type==='credit_card'?principal:null,current_outstanding:parseInt(document.getElementById('liOutstanding').value)||0,interest_rate:parseFloat(document.getElementById('liRate').value)||0,emi_amount:type==='credit_card'?0:(parseInt(document.getElementById('liEmi').value)||0),minimum_due:type==='credit_card'?(parseInt(document.getElementById('liEmi').value)||0):null,start_date:document.getElementById('liStart').value||null,next_due_date:document.getElementById('liDue').value||null,due_date:document.getElementById('liDue').value||null,interest_type:type==='credit_card'?'revolving':'reducing',auto_calculation_mode:type==='credit_card'?'manual':'hybrid'}; try{ await api('/api/liabilities',{method:'POST',body:body}); closeModal(); await reload('liabilities'); toast('Liability saved'); }catch(e){ toast(e.message,true); } }
+function showLiabilityPayment(id){ openModal('Record Payment', '<div style="display:flex;flex-direction:column;gap:12px;">' + fld('lpDate','Payment date',inp('date')) + fld('lpAmount','Amount',inp('number')) + '<div class="grid grid-cols-2 gap-3">' + fld('lpPrincipal','Principal',inp('number')) + fld('lpInterest','Interest',inp('number')) + '</div>' + fld('lpMovement','Existing Ledger movement ID (optional)',inp('number')) + saveBtn('Save Payment','saveLiabilityPayment('+id+')') + '</div>'); }
+async function saveLiabilityPayment(id){ var body={payment_date:document.getElementById('lpDate').value,payment_amount:parseInt(document.getElementById('lpAmount').value)||0,principal_component:parseInt(document.getElementById('lpPrincipal').value)||null,interest_component:parseInt(document.getElementById('lpInterest').value)||null,movement_id:parseInt(document.getElementById('lpMovement').value)||null,payment_type:'emi'}; try{ await api('/api/liabilities/'+id+'/payments',{method:'POST',body:body}); closeModal(); await reload('liabilities'); toast('Payment saved; Ledger movement was not duplicated'); }catch(e){ toast(e.message,true); } }
+function showLiabilitySnapshot(id){ openModal('Add Balance Snapshot', '<div style="display:flex;flex-direction:column;gap:12px;">' + fld('lsDate','Snapshot date',inp('date')) + fld('lsBal','Outstanding balance',inp('number')) + saveBtn('Save Snapshot','saveLiabilitySnapshot('+id+')') + '</div>'); }
+async function saveLiabilitySnapshot(id){ try{ await api('/api/liabilities/'+id+'/balance-snapshots',{method:'POST',body:{snapshot_date:document.getElementById('lsDate').value,outstanding_balance:parseInt(document.getElementById('lsBal').value)||0,source:'manual'}}); closeModal(); await reload('liabilities'); toast('Snapshot saved'); }catch(e){ toast(e.message,true); } }
+async function showLiabilitySchedule(id){ try{ var r=await api('/api/liabilities/'+id+'/schedule'); openModal('Estimated Schedule','<div class="text-xs mb-2" style="color:var(--c-sub);">Calculated schedules are estimates only.</div><div style="overflow-x:auto;max-height:60vh;"><table class="w-full text-xs"><tbody>'+r.schedule.slice(0,120).map(function(x){return '<tr><td class="p-1">'+esc(x.due_date)+'</td><td class="p-1 text-right mono">Rp'+fmt(x.payment_amount)+'</td><td class="p-1 text-right mono">Rp'+fmt(x.principal)+'</td><td class="p-1 text-right mono">Rp'+fmt(x.interest)+'</td><td class="p-1 text-right mono">Rp'+fmt(x.remaining)+'</td></tr>';}).join('')+'</tbody></table></div>'); }catch(e){ toast(e.message,true); } }
+
 function renderCicilan() {
   var cards = M.cicilan.map(function (c, idx) {
     var monthsLeft = c.monthly > 0 ? Math.ceil(c.sisa / c.monthly) : 0;

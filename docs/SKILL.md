@@ -472,3 +472,50 @@ KoteCash now supports backend-generated monthly net-worth snapshots for historic
 - Current values are not reused for past months except legacy/manual valuation fallbacks already exposed by the shared Wealth valuation service.
 - No general liability CRUD exists yet; liabilities are limited to existing credit-card and cicilan-derived values until Phase 11.
 - Optional Cloudflare cron can call the generation endpoint for the previous completed month, but cron is not required; manual generation/backfill is available now.
+
+## Phase 11 Liability APIs
+
+Phase 11 adds `/api/liabilities` as the normalized debt module for loans, credit cards, BNPL, overdrafts, informal loans, payments, balance snapshots, and net-worth subtraction. Ordinary spending and income remain in `/api/movements`; investment transactions remain in the Wealth APIs.
+
+### Liability model
+
+`POST /api/liabilities` creates a user-scoped liability without creating a Ledger movement. Supported `liability_type`: `home_loan`, `personal_loan`, `vehicle_loan`, `education_loan`, `gold_loan`, `business_loan`, `credit_card`, `bnpl`, `overdraft`, `informal_loan`, `other`. Supported `interest_type`: `reducing`, `flat`, `simple`, `revolving`, `manual`. Supported `status`: `active`, `closed`, `settled`, `written_off`, `inactive`.
+
+Key fields: `name`, `institution`, `account_number_masked`, `currency`, `original_principal`, `current_outstanding`, `interest_rate`, `interest_type`, `emi_amount`, `repayment_frequency`, `start_date`, `maturity_date`, `next_due_date`, `payment_day`, `include_in_net_worth`, `auto_calculation_mode`, `linked_wallet_id`, `linked_category_id`, `notes`, and `metadata_json`. Credit cards additionally accept `credit_limit`, `statement_balance`, `available_credit`, `statement_date`, `due_date`, `minimum_due`, and `full_payment_amount`.
+
+### Payment model and movement linking
+
+`POST /api/liabilities/:id/payments` records a liability payment without creating a Ledger movement. Supported `payment_type`: `emi`, `part_payment`, `prepayment`, `interest_only`, `fee`, `penalty`, `refund`, `adjustment`, `settlement`. Supported `source`: `manual`, `linked_movement`, `import`, `generated_schedule`, `migration`.
+
+Use optional `movement_id` to link an existing Ledger movement. The API validates same-user ownership and prevents the same movement from being linked to more than one liability payment. Deleting a liability payment does not delete the linked movement, so the Ledger expense/cashflow is not duplicated.
+
+Update and delete payment records with `PUT /api/liability-payments/:id` and `DELETE /api/liability-payments/:id`.
+
+### Balance snapshots
+
+`POST /api/liabilities/:id/balance-snapshots` records a manual/opening/reconciliation balance for a date. Same user/liability/date inserts are corrected in place. Future snapshots are ignored by as-of valuation. Update and delete with `PUT /api/liability-balance-snapshots/:id` and `DELETE /api/liability-balance-snapshots/:id`.
+
+### Calculation modes
+
+`auto_calculation_mode` controls valuation:
+
+- `manual`: latest balance snapshot on or before the as-of date, falling back to stored outstanding with a warning.
+- `payment_based`: original principal less principal repayments and adjustments.
+- `amortization`: estimated payment-based/amortization valuation.
+- `hybrid`: latest manual balance snapshot first, then payment-based estimate with a readable fallback warning.
+
+Loan schedules returned by `GET /api/liabilities/:id/schedule` are estimates only and are not lender-authoritative. Reducing, flat, and simple interest are supported for weekly, fortnightly, monthly, quarterly, and yearly repayment frequencies where sufficient fields are present.
+
+### Credit-card behavior
+
+Credit cards are liabilities with `liability_type=credit_card`, card/institution fields, limit, statement balance, current outstanding, statement date, due date, minimum due, full payment amount, and interest rate. The API reports utilization and due status. Revolving interest is not generated automatically; Ledger card purchases remain ordinary `/api/movements` rows and are not converted into liability payments.
+
+### Summary, Net Worth, and snapshots
+
+`GET /api/liabilities/summary` returns total outstanding, original principal, principal repaid, interest and fees paid, EMI commitment, next-30-day items, overdue amount, active count, credit-card utilization, highest-interest liability, earliest maturity, payoff progress, and null ratios where data is insufficient.
+
+Net Worth subtracts active `include_in_net_worth=true` Phase 11 liabilities as of the selected date using latest valid snapshots/payments/estimates. Monthly net-worth snapshots preserve locked rows, exclude future payments/snapshots, and store liability category breakdowns for home loans, personal loans, vehicle loans, education loans, credit cards, BNPL, and other liabilities.
+
+### Deletion safeguards
+
+`DELETE /api/liabilities/:id` permanently deletes only liabilities with no payments, balance snapshots, linked movements, snapshot dependencies, or import references. If dependencies exist, the liability is soft-deactivated and a dependency report is returned.

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { AppContext, Bindings, Variables } from "../types";
 import { currentMonth } from "../types";
 import { getWealthAggregation } from "../wealth/valuation";
+import { liabilityTotals, dueStatus } from "../wealth/liabilities";
 import {
   savingsRate,
   dtiRatio,
@@ -50,7 +51,7 @@ app.get("/dashboard", async (c: AppContext) => {
   } catch (e) { /* sweep is best-effort; never block the dashboard */ }
 
   const asOf = `${month}-31`;
-  const [wallets, cc, deposits, wealth, cicilan, mvRes, earmarks] = await Promise.all([
+  const [wallets, cc, deposits, wealth, cicilan, mvRes, earmarks, phase11Liabilities] = await Promise.all([
     c.env.DB.prepare("SELECT id, initial_balance FROM wallets WHERE user_id = ?").bind(uid)
       .all<{ id: number; initial_balance: number }>(),
     c.env.DB.prepare("SELECT id, balance FROM credit_cards WHERE user_id = ?").bind(uid)
@@ -65,6 +66,7 @@ app.get("/dashboard", async (c: AppContext) => {
     ).bind(uid).all<Movement>(),
     c.env.DB.prepare("SELECT source_type, source_id, goal_id, amount FROM earmarks WHERE user_id = ?")
       .bind(uid).all<Earmark>(),
+    liabilityTotals(c.env.DB, uid, asOf),
   ]);
 
   const mv = mvRes.results;
@@ -83,7 +85,11 @@ app.get("/dashboard", async (c: AppContext) => {
     (s, d) => s + accountBalance('deposit', d.id, d.amount, mv), 0);
   const totalPortfolios = wealth.total;
   const totalAssets = totalLiquid + totalDeposits + wealth.total;
-  const netWorth = totalAssets - totalCC - totalCicilanSisa;
+  const totalLiabilities = totalCC + totalCicilanSisa + phase11Liabilities.total;
+  const netWorth = totalAssets - totalLiabilities;
+  const upcomingEmi = phase11Liabilities.items.filter((l:any)=>l.next_due_date && l.next_due_date >= new Date().toISOString().slice(0,10)).sort((a:any,b:any)=>String(a.next_due_date).localeCompare(String(b.next_due_date)))[0] || null;
+  const overdueAmount = phase11Liabilities.items.filter((l:any)=>dueStatus(l.next_due_date || l.due_date)==="overdue").reduce((s:number,l:any)=>s + (l.emi_amount || l.minimum_due || l.valuation.outstanding),0);
+  const highestOutstandingLiability = phase11Liabilities.items.reduce((a:any,b:any)=>!a || b.valuation.outstanding > a.valuation.outstanding ? b : a, null);
 
   const totalEarmarked = earmarks.results.reduce((s, e) => s + e.amount, 0);
   const walletEarmarked = earmarks.results
@@ -116,6 +122,15 @@ app.get("/dashboard", async (c: AppContext) => {
     excludedWealthInvestmentValue: wealth.excluded_value,
     assetBreakdown: { wallets: totalLiquid, deposits: totalDeposits, ...wealth.assetBreakdown },
     totalCicilanSisa,
+    totalLiabilities,
+    phase11LiabilitiesTotal: phase11Liabilities.total,
+    monthlyDebtPayments: totalMonthlyDebt + phase11Liabilities.items.reduce((s:any,l:any)=>s+(l.emi_amount||l.minimum_due||0),0),
+    upcomingEmi,
+    overdueAmount,
+    highestOutstandingLiability,
+    debtToAssetsRatio: totalAssets ? totalLiabilities / totalAssets : null,
+    netWorthAfterLiabilities: netWorth,
+    liabilityBreakdown: phase11Liabilities.breakdown,
     netWorth,
     savingsRate: sr,
     savingsTier: await savingsTier(sr),
