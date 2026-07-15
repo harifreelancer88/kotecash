@@ -17,9 +17,11 @@ app.get("/", async (c: AppContext) => {
   const category = c.req.query("category");
   const month = c.req.query("month");
   const q = c.req.query("q");
+  const includeExcluded = c.req.query("include_excluded") === "true";
 
   let sql = "SELECT * FROM movements WHERE user_id = ?";
   const args: (string | number)[] = [uid];
+  if (!includeExcluded) sql += " AND COALESCE(status,'active')='active'";
   if (walletId) {
     sql += " AND ((src_kind='wallet' AND src_id=?) OR (dst_kind='wallet' AND dst_id=?))";
     args.push(Number(walletId), Number(walletId));

@@ -10,12 +10,14 @@ app.get("/", async (c: AppContext) => {
   const search = c.req.query("search");
   const category = c.req.query("category");
   const type = c.req.query("type");
+  const includeExcluded = c.req.query("include_excluded") === "true";
 
   let sql = `SELECT m.*, p.sync_status as pennywise_sync_status, p.reference_number as pennywise_reference_number
              FROM movements m
              LEFT JOIN pennywise_sync_records p ON p.user_id=m.user_id AND p.movement_id=m.id
              WHERE m.user_id = ?`;
   const args: (string | number)[] = [uid];
+  if (!includeExcluded) sql += " AND COALESCE(m.status,'active')='active'";
   if (search) { sql += " AND m.description LIKE ?"; args.push(`%${search}%`); }
   if (category && category !== "all") { sql += " AND m.category_id=?"; args.push(Number(category)); }
   if (type === "income") sql += " AND m.src_kind IS NULL";
@@ -35,6 +37,8 @@ app.get("/", async (c: AppContext) => {
     source: m.pennywise_sync_status ? "pennywise_sms" : null,
     sync_status: m.pennywise_sync_status ?? null,
     reference_number: m.pennywise_reference_number ?? null,
+    status: m.status ?? "active",
+    duplicate_of_movement_id: m.duplicate_of_movement_id ?? null,
   }));
   return c.json(out);
 });

@@ -75,7 +75,7 @@ budgets.get("/", async (c: AppContext) => {
 
   const actuals = await c.env.DB.prepare(
     `SELECT category_id, SUM(amount) as spent FROM movements
-     WHERE user_id=? AND date BETWEEN ? AND ? AND dst_kind IS NULL
+     WHERE user_id=? AND COALESCE(status,'active')='active' AND date BETWEEN ? AND ? AND dst_kind IS NULL
      GROUP BY category_id`
   )
     .bind(uid, `${month}-01`, `${month}-31`)

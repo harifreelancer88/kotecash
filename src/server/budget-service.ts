@@ -30,7 +30,7 @@ export async function getCategories(db:D1Database, userId:number){
   return res.results || [];
 }
 export async function getMovements(db:D1Database,userId:number,from:string,to:string){
-  const res = await db.prepare(`SELECT m.*, c.name category_name FROM movements m LEFT JOIN categories c ON c.id=m.category_id AND c.user_id=m.user_id WHERE m.user_id=? AND m.date BETWEEN ? AND ? ORDER BY m.date,m.id`).bind(userId,from,to).all<any>();
+  const res = await db.prepare(`SELECT m.*, c.name category_name FROM movements m LEFT JOIN categories c ON c.id=m.category_id AND c.user_id=m.user_id WHERE m.user_id=? AND m.date BETWEEN ? AND ? AND COALESCE(m.status,'active')='active' ORDER BY m.date,m.id`).bind(userId,from,to).all<any>();
   return res.results || [];
 }
 export async function getBudgets(db:D1Database,userId:number,month?:string,status?:string){
