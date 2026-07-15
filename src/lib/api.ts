@@ -21,12 +21,26 @@ export async function api<T = any>(
   return res.json();
 }
 
-export function fmt(n: number): string {
-  return Number(n || 0).toLocaleString("id-ID");
+export function fmt(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(Number(n))) return "—";
+  return Number(n).toLocaleString("en-IN");
 }
 
-export function rp(n: number): string {
-  return "Rp" + fmt(n);
+export function formatCurrency(n: number | null | undefined, decimals?: number): string {
+  if (n === null || n === undefined || !Number.isFinite(Number(n))) return "—";
+  const value = Number(n);
+  const fractionDigits = decimals ?? 0;
+  const formatted = new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(Math.abs(value));
+  return value < 0 ? `-${formatted}` : formatted;
+}
+
+export function rp(n: number | null | undefined): string {
+  return formatCurrency(n);
 }
 
 export function pct(n: number): string {
