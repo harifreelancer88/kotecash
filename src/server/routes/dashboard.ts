@@ -3,6 +3,7 @@ import type { AppContext, Bindings, Variables } from "../types";
 import { currentMonth } from "../types";
 import { getWealthAggregation } from "../wealth/valuation";
 import { liabilityTotals, dueStatus } from "../wealth/liabilities";
+import { calculateGoalProgress } from "../wealth/goals";
 import {
   savingsRate,
   dtiRatio,
@@ -101,6 +102,14 @@ app.get("/dashboard", async (c: AppContext) => {
   const sisa = income - expense;
   const sr = savingsRate(income, expense);
   const dti = dtiRatio(income, totalMonthlyDebt);
+  let goalsSummary:any = null;
+  try {
+    const goals = (await c.env.DB.prepare("SELECT * FROM financial_goals WHERE user_id=? AND status='active' ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,target_date,id LIMIT 3").bind(uid).all<any>()).results;
+    const priority = [];
+    let highPriorityWarning = false;
+    for (const g of goals) { const p = await calculateGoalProgress(c.env.DB, uid, g, asOf); priority.push({ id:g.id, name:g.name, priority:g.priority, target_date:g.target_date, progress_percent:p.progress_percent, remaining_amount:p.remaining_amount, status:p.status }); if(g.priority==='high' && ['behind','slightly_behind'].includes(p.status)) highPriorityWarning = true; }
+    goalsSummary = { top_priority_goals: priority, next_target_date: priority.map((g:any)=>g.target_date).filter(Boolean).sort()[0] || null, high_priority_warning: highPriorityWarning };
+  } catch { goalsSummary = null; }
 
   return c.json({
     period: month,
@@ -136,6 +145,7 @@ app.get("/dashboard", async (c: AppContext) => {
     savingsTier: await savingsTier(sr),
     dti,
     dtiTier: await dtiTier(dti),
+    goalsSummary,
   });
 });
 

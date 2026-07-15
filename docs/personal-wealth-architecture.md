@@ -940,3 +940,9 @@ Locked snapshots preserve historical totals and breakdowns until explicitly unlo
 ## Phase 11 note — Liabilities and debt integration
 
 Phase 11 introduces normalized liabilities for loans, credit cards, BNPL, overdrafts, informal loans, repayment records, lender/manual balance snapshots, and estimated amortization schedules. Ledger movements remain the source of truth for ordinary cashflow, and liability payments may link to existing movements without duplicating expenses. Net Worth now subtracts active liabilities that are included in net worth, using as-of balance snapshots, payment-based estimates, or amortization/hybrid fallbacks. Monthly snapshots preserve locked history and store liability category breakdowns alongside asset breakdowns.
+
+## Phase 12 note: financial goals and planning
+
+Phase 12 adds normalized financial goals as a planning/reporting layer above Wealth, Liabilities, Net Worth, wallets, and the movement ledger. Goals can be manually funded, linked to valued wealth accounts/assets, linked to liabilities for debt payoff tracking, or hybrid. Backend goal calculations own progress, inflation-adjusted target estimates, monthly contribution estimates, scenario comparisons, emergency-fund coverage, retirement estimates, debt-payoff progress, valuation warnings, and allocation-overlap warnings.
+
+Goals intentionally do not create movements, investment transactions, liability payments, or Net Worth changes. Goal contributions are informational links or manual annotations, not source ledgers. Deletion uses safeguards: goals with dependencies are cancelled rather than hard-deleted, and linked financial records remain untouched.

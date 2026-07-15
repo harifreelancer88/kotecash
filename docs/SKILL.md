@@ -519,3 +519,90 @@ Net Worth subtracts active `include_in_net_worth=true` Phase 11 liabilities as o
 ### Deletion safeguards
 
 `DELETE /api/liabilities/:id` permanently deletes only liabilities with no payments, balance snapshots, linked movements, snapshot dependencies, or import references. If dependencies exist, the liability is soft-deactivated and a dependency report is returned.
+
+## Phase 12 Financial Goals & Planning
+
+KoteCash now exposes normalized financial-goal APIs under `/api/goals`. These goals are reporting and planning records only: creating or updating goals, links, scenarios, or contributions **does not** create Ledger movements, investment transactions, liability payments, or Net Worth changes.
+
+### Goal model
+`POST /api/goals` accepts:
+```json
+{
+  "name": "Emergency fund",
+  "goal_type": "emergency_fund",
+  "target_amount": 300000,
+  "target_date": "2027-01-01",
+  "current_manual_amount": 50000,
+  "funding_mode": "hybrid",
+  "priority": "high",
+  "status": "active",
+  "start_date": "2026-07-15",
+  "inflation_rate": 6,
+  "expected_return_rate": 5,
+  "monthly_contribution_override": 10000,
+  "include_existing_assets": true,
+  "notes": "Planning estimate",
+  "metadata_json": { "average_essential_monthly_expenses": 50000, "desired_coverage_months": 6 }
+}
+```
+- `goal_type`: `emergency_fund`, `retirement`, `child_education`, `home_purchase`, `vehicle_purchase`, `debt_payoff`, `vacation`, `wedding`, `major_purchase`, `custom`.
+- `funding_mode`: `manual`, `linked_assets`, or `hybrid`.
+- `priority`: `high`, `medium`, or `low`.
+- `status`: `active`, `paused`, `completed`, or `cancelled`.
+- Target amount must be positive; manual current amount cannot be negative; target date cannot be before start date; rates must be finite and within validation bounds.
+- Completing a goal preserves `completed_at`.
+
+### Goal endpoints
+- `GET /api/goals` supports filters: `goal_type`, `status`, `priority`, `target_before`, `behind_only=true`, `completed=true`.
+- `POST /api/goals`, `GET /api/goals/:id`, `PUT /api/goals/:id`, `DELETE /api/goals/:id`.
+- `GET /api/goals/:id/progress` returns backend-calculated progress and planning details.
+- `GET /api/goals/summary` returns active/completed counts, funded and remaining totals, on-track/behind counts, monthly contribution totals, emergency-fund coverage, debt-payoff progress, and allocation warnings.
+
+### Goal links
+- `GET /api/goals/:id/links`
+- `POST /api/goals/:id/links`
+- `PUT /api/goal-links/:id`
+- `DELETE /api/goal-links/:id`
+
+Create a link with one reference only:
+```json
+{ "link_type": "wealth_account", "account_id": 4, "allocation_percent": 50 }
+```
+```json
+{ "link_type": "wealth_asset", "asset_id": 9, "fixed_allocation_amount": 100000 }
+```
+```json
+{ "link_type": "liability", "liability_id": 2 }
+```
+Ownership is validated. Allocation percent must be 0–100. Duplicate links are blocked by schema constraints. Account and asset values use backend wealth valuation services; debt-payoff liability links use current outstanding from liability calculation. Missing linked values are reported as missing and are not silently treated as zero. If allocations for the same linked account/asset exceed 100% across goals, progress responses include a warning.
+
+### Progress rules
+Savings-style goals calculate current funded amount from linked allocated asset values plus manual amount when `funding_mode` permits it. Debt-payoff goals calculate progress as starting debt minus current outstanding. Responses include target, current, remaining, displayed progress percent clamped to 0–100, overfunding amount, elapsed percent where dates exist, expected amount by today, ahead/behind amount, status, valuation completeness, missing/stale linked values, calculation date, warnings, inflation estimate, and monthly plan. The browser should display these backend values rather than recompute them.
+
+### Inflation assumptions
+Inflation estimates are available for `retirement`, `child_education`, `home_purchase`, `wedding`, and `major_purchase` when both target date and user-provided inflation rate exist. The original target is not overwritten. Results are labeled estimates and use compound annual inflation with partial-year support.
+
+### Monthly contribution planning
+`POST /api/goals/:id/calculate-plan` returns an estimated monthly contribution, months remaining, future value of current corpus, expected target amount, assumptions, and status. It supports zero-return and expected-return calculations plus `monthly_contribution_override`. Status can be `calculated`, `already_funded`, `target_date_passed`, or `missing_target_date`. Treat these as planning estimates, not guaranteed financial advice.
+
+### Scenario planning
+`POST /api/goals/:id/scenarios` compares up to three scenarios with inputs such as target amount, target date, current amount, monthly contribution, expected return, and inflation rate. It returns projected amount, projected shortfall/surplus, required contribution, and assumptions. KoteCash does not run Monte Carlo simulation and does not guarantee returns.
+
+### Goal contributions
+- `GET /api/goals/:id/contributions`
+- `POST /api/goals/:id/contributions`
+- `PUT /api/goal-contributions/:id`
+- `DELETE /api/goal-contributions/:id`
+
+Contribution sources: `manual`, `linked_movement`, `linked_investment`, `import`, `adjustment`. Linked movement and investment transaction ownership is validated. The same source record cannot be linked twice to the same goal. Deleting a contribution never deletes its source movement or transaction.
+
+### Emergency-fund behavior
+Emergency-fund metadata can include `average_essential_monthly_expenses` and `desired_coverage_months` (commonly 3, 6, 9, or 12). Progress includes current coverage months, target coverage months, shortfall, and status. KoteCash only uses linked liquid accounts/assets selected by the user; it does not automatically classify all investments as liquid.
+
+### Retirement and debt-payoff behavior
+Retirement goals support user-entered inflation and return assumptions plus links to retirement-designated wealth accounts/assets such as EPF, NPS, PPF, mutual funds, stocks, fixed deposits, and other retirement assets. Projections are estimates and do not include tax or withdrawal strategy.
+
+Debt-payoff goals link liabilities and report starting debt, current outstanding, amount repaid, scheduled monthly payments, and the highest-interest liability. They do not modify liability schedules and do not create payments.
+
+### Deletion safeguards
+Deleting a goal with links or contributions cancels it and returns a dependency report. Permanent deletion is only allowed when no links, contributions, historical references, or import references exist. Linked accounts, assets, liabilities, movements, and investment transactions are never deleted by goal deletion.
