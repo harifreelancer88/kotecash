@@ -13,7 +13,8 @@ import {
   Target,
   RefreshCw,
   Upload,
-  Scale
+  Scale,
+  Users
 } from 'lucide-astro';
 
 const url = new URL(Astro.request.url);
@@ -31,6 +32,7 @@ const moreItems = [
   { id: 'budgets', label: 'Budgets', icon: Wallet },
   { id: 'income', label: 'Income', icon: Wallet },
   { id: 'wallets', label: 'Wallets', icon: Wallet },
+  { id: 'family', label: 'Family', icon: Users },
   { id: 'networth', label: 'Net Worth', icon: LineChart },
   { id: 'scenarios', label: 'What-If', icon: Calculator },
   { id: 'goals', label: 'Goals', icon: Target },

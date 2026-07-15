@@ -12,7 +12,7 @@ var M = {
   cicilan: [], txns: [], networth: [], goals: [], earmarks: [],
   budgets: [], budgetSummary: [], cashFlow: {}, cashFlowCategories: [], cashFlowAlerts: [], recurringCandidates: [], expenseCats: [], incomeCats: [],
   recurring: [], liabilities: [], liabilitySummary: {},
-  dashboard: {}, financialOverview: null, incomeSources: [], incomeSummary: {}, incomeForecast: {}, expectedCalendar: {},
+  dashboard: {}, financialOverview: null, incomeSources: [], incomeSummary: {}, incomeForecast: {}, expectedCalendar: {}, householdSummary: null, households: [], householdMembers: [], ownership: [],
 };
 
 // name/id resolution maps
@@ -80,11 +80,11 @@ async function loadAll() {
     api("/api/categories"), api("/api/wallets"), api("/api/credit-cards"),
     api("/api/deposits"), api("/api/portfolios"), api("/api/cicilan"),
     api("/api/goals"), api("/api/budgets"), api("/api/transactions"),
-    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"), api("/api/liabilities"), api("/api/liabilities/summary"), api("/api/budgets/summary"), api("/api/cash-flow/monthly"), api("/api/cash-flow/categories"), api("/api/cash-flow/alerts"), api("/api/cash-flow/recurring-candidates"), api("/api/dashboard/financial-overview"), api("/api/income-sources"), api("/api/income/summary"), api("/api/income/forecast"), api("/api/cash-flow/expected-calendar"),
+    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"), api("/api/liabilities"), api("/api/liabilities/summary"), api("/api/budgets/summary"), api("/api/cash-flow/monthly"), api("/api/cash-flow/categories"), api("/api/cash-flow/alerts"), api("/api/cash-flow/recurring-candidates"), api("/api/dashboard/financial-overview"), api("/api/income-sources"), api("/api/income/summary"), api("/api/income/forecast"), api("/api/cash-flow/expected-calendar"), api("/api/household/summary"), api("/api/households"), api("/api/ownership"),
   ]);
   var cats = data[0], wallets = data[1], ccs = data[2], deps = data[3],
     ports = data[4], cics = data[5], goals = data[6], buds = data[7],
-    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {}, liabilities = data[13] || {}, liabilitySummary = data[14] || {}, budgetSummary = data[15] || [], cashFlow = data[16] || {}, cashFlowCategories = data[17] || [], cashFlowAlerts = data[18] || [], recurringCandidates = data[19] || [], financialOverview = data[20] || null, incomeSources = data[21] || [], incomeSummary = data[22] || {}, incomeForecast = data[23] || {}, expectedCalendar = data[24] || {};
+    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {}, liabilities = data[13] || {}, liabilitySummary = data[14] || {}, budgetSummary = data[15] || [], cashFlow = data[16] || {}, cashFlowCategories = data[17] || [], cashFlowAlerts = data[18] || [], recurringCandidates = data[19] || [], financialOverview = data[20] || null, incomeSources = data[21] || [], incomeSummary = data[22] || {}, incomeForecast = data[23] || {}, expectedCalendar = data[24] || {}, householdSummary = data[25] || null, households = data[26] || [], ownership = data[27] || [];
 
   cats.forEach(function (c) { CATMAP[c.name] = c.id; });
   M.expenseCats = cats.filter(function (c) { return c.type === "expense"; }).map(function (c) { return c.name; });
@@ -141,7 +141,7 @@ async function loadAll() {
   });
 
   M.income = dash.income; M.expense = dash.expense; M.net = dash.sisa;
-  M.savingsRate = cashFlow.savings_rate ?? dash.savingsRate; M.dti = dash.dti; M.dashboard = dash || {}; M.financialOverview = financialOverview; M.incomeSources = incomeSources; M.incomeSummary = incomeSummary; M.incomeForecast = incomeForecast; M.expectedCalendar = expectedCalendar; M.budgetSummary = budgetSummary; M.cashFlow = cashFlow; M.cashFlowCategories = cashFlowCategories; M.cashFlowAlerts = cashFlowAlerts; M.recurringCandidates = recurringCandidates;
+  M.savingsRate = cashFlow.savings_rate ?? dash.savingsRate; M.dti = dash.dti; M.dashboard = dash || {}; M.financialOverview = financialOverview; M.incomeSources = incomeSources; M.incomeSummary = incomeSummary; M.incomeForecast = incomeForecast; M.expectedCalendar = expectedCalendar; M.householdSummary = householdSummary; M.households = households; M.ownership = ownership; M.householdMembers = (householdSummary && householdSummary.member_wise_net_worth || []).map(function(x){return x.member;}); M.budgetSummary = budgetSummary; M.cashFlow = cashFlow; M.cashFlowCategories = cashFlowCategories; M.cashFlowAlerts = cashFlowAlerts; M.recurringCandidates = recurringCandidates;
 
   M.networth = ((nws.snapshots && nws.snapshots.length) ? nws.snapshots.slice().reverse() : (nw.snapshots || [])).map(function (s) {
     var br = s.breakdown || {};
@@ -247,6 +247,7 @@ function renderPage(id) {
     case "creditcard": return renderCreditCard();
     case "assets": return renderAssets();
     case "wallets": return renderWallets();
+    case "family": return renderFamily();
     case "goals": return renderGoals();
     case "account": return renderAccount();
     case "api": return renderAPI();
@@ -513,6 +514,34 @@ function renderCategories() {
 function catIdByName(name) { return CATMAP[name]; }
 
 /* ── BUDGETS ── */
+
+function memberOptions(selId){ return (M.householdMembers||[]).map(function(m){ return '<option value="'+m.id+'" '+(String(selId)===String(m.id)?'selected':'')+'>'+esc(m.display_name)+' · '+esc(m.relationship)+'</option>'; }).join(''); }
+function renderFamily(){
+  var tab = new URLSearchParams(window.location.search).get('familyTab') || 'household';
+  var hs = M.householdSummary || {}; var members = hs.member_wise_net_worth || [];
+  function t(id,label){ return '<a class="btn btn-sm min-h-[40px] '+(tab===id?'btn-primary':'')+'" href="/?page=family&familyTab='+id+'" data-page="family">'+label+'</a>'; }
+  var tabs='<div class="flex gap-2 overflow-x-auto pb-2 mb-4">'+t('household','Household')+t('members','Members')+t('ownership','Ownership')+t('expenses','Shared Expenses')+t('summary','Member Summary')+'</div>';
+  var body='';
+  if(tab==='members'){
+    body='<div class="flex justify-end mb-3"><button class="btn-primary px-4 py-2 rounded-lg" onclick="showAddMember()">Add member</button></div><div class="grid grid-cols-1 md:grid-cols-2 gap-3">'+(members.map(function(x){return '<section class="card p-4"><div class="flex justify-between gap-3"><div><h2 class="font-bold">'+esc(x.member.display_name)+'</h2><p class="text-xs" style="color:var(--c-sub)">'+esc(x.member.relationship)+(x.member.dependent?' · dependant':'')+'</p></div><button class="btn btn-xs min-h-[36px]" onclick="archiveMember('+x.member.id+')">Archive</button></div><div class="grid grid-cols-3 gap-2 mt-3 text-xs">'+smallMetric('Assets',money(x.member_assets))+smallMetric('Liabilities',money(x.member_liabilities))+smallMetric('Net Worth',money(x.member_net_worth))+'</div></section>';}).join('')||'<div class="card p-4">No members.</div>')+'</div>';
+  } else if(tab==='ownership'){
+    body='<div class="flex justify-end mb-3"><button class="btn-primary px-4 py-2 rounded-lg" onclick="showOwnershipEditor()">Assign ownership</button></div><div class="grid grid-cols-1 gap-3">'+((M.ownership||[]).map(function(o){return '<section class="card p-4"><div class="flex justify-between gap-2"><div><b>'+esc(o.record_type)+' #'+esc(o.record_id)+'</b><p class="text-xs" style="color:var(--c-sub)">'+esc(o.ownership_type)+' · '+esc(o.allocation_basis)+' · '+(o.ownership_percent||0)+'% · '+esc(o.member_name||'Household')+'</p></div><button class="btn btn-xs" onclick="deleteOwnership('+o.id+')">Remove</button></div></section>';}).join('')||'<div class="card p-4">No explicit ownership yet. Missing records resolve to Self 100%.</div>')+'</div><section class="card p-4 mt-3 text-xs" style="color:var(--c-sub)">Warnings: '+esc((hs.ownership_warnings||[]).join(' · ')||'none')+'</section>';
+  } else if(tab==='expenses'){
+    body='<section class="card p-4"><h2 class="font-bold mb-2">Shared Expenses</h2><p class="text-sm" style="color:var(--c-sub)">Open a Ledger movement and use the API allocation endpoints to split school fees, groceries, medical costs, rent, or family trips. Existing movements are never duplicated or edited.</p><pre class="code-block p-3 mt-3 text-xs">POST /api/movements/:id/allocations</pre></section>';
+  } else if(tab==='summary'){
+    body='<div class="grid grid-cols-1 md:grid-cols-2 gap-3">'+(members.map(function(x){return '<section class="card p-4"><h2 class="font-bold">'+esc(x.member.display_name)+'</h2><div class="grid grid-cols-2 gap-2 mt-3">'+smallMetric('Net Worth',money(x.member_net_worth))+smallMetric('Assets',money(x.member_assets))+smallMetric('Liabilities',money(x.member_liabilities))+smallMetric('Goals',(x.goals||[]).length||0)+'</div></section>';}).join('')||'<div class="card p-4">No summary.</div>')+'</div>';
+  } else {
+    body='<section class="card p-4 mb-3"><div class="flex justify-between items-start gap-3"><div><h2 class="font-bold">'+esc((hs.household||{}).name||'Household')+'</h2><p class="text-xs" style="color:var(--c-sub)">Household view is default. Joint/shared values are counted once.</p></div><span class="text-xs px-2 py-1 rounded" style="background:rgba(53,88,114,.08)">'+esc((hs.household||{}).household_type||'family')+'</span></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">'+smallMetric('Net Worth',money(hs.household_net_worth))+smallMetric('Assets',money(hs.total_assets))+smallMetric('Liabilities',money(hs.total_liabilities))+smallMetric('Joint/shared',money((hs.joint_assets||0)-(hs.joint_liabilities||0)+(hs.shared_household_value||0)))+'</div></section><section class="card p-4"><h2 class="font-bold mb-2">Unallocated Records</h2><div class="text-sm" style="color:var(--c-sub)">'+esc((hs.unallocated_records||[]).length+' records with partial/unallocated ownership')+'</div></section>';
+  }
+  return '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Family</h1><p class="page-subtitle">Household members, ownership, shared expenses, and member-wise net worth.</p>'+tabs+body;
+}
+function showAddMember(){ openModal('Add family member','<div class="space-y-3">'+fld('fmName','Display name',inp('text'))+fld('fmRel','Relationship',sel('<option>spouse</option><option>child</option><option>dependant</option><option>parent</option><option>sibling</option><option>other</option>'))+fld('fmDob','Date of birth (optional)',inp('date'))+'<label class="flex gap-2 items-center text-sm"><input id="fmDep" type="checkbox"> Dependent</label>'+saveBtn('Save','saveMember()')+'</div>'); }
+async function saveMember(){ var h=(M.households||[])[0]; try{ await api('/api/households/'+h.id+'/members',{method:'POST',body:{display_name:document.getElementById('fmName').value,relationship:document.getElementById('fmRel').value,date_of_birth:document.getElementById('fmDob').value||null,dependent:document.getElementById('fmDep').checked}}); closeModal(); await reload('family'); }catch(e){ toast(e.message,true); } }
+async function archiveMember(id){ if(!confirm('Archive this member? Financial history remains visible.'))return; try{ await api('/api/household-members/'+id,{method:'DELETE'}); await reload('family'); }catch(e){ toast(e.message,true); } }
+function showOwnershipEditor(){ openModal('Assign ownership','<div class="space-y-3">'+fld('owType','Record type',sel('<option>wallet</option><option>wealth_account</option><option>wealth_asset</option><option>liability</option><option>goal</option><option>income_source</option><option>budget</option><option>other_asset</option>'))+fld('owId','Record ID',inp('number'))+fld('owMember','Member',sel('<option value="">Household/shared</option>'+memberOptions()))+fld('owOwn','Ownership type',sel('<option>individual</option><option>joint</option><option>household</option><option>custodial</option><option>beneficiary</option><option>shared_expense</option>'))+fld('owBasis','Allocation basis',sel('<option>full</option><option>percentage</option><option>equal</option><option>informational</option>'))+fld('owPct','Percent',inp('number'),'100')+'<p class="text-xs" style="color:var(--c-sub)">Save is blocked if total economic allocation exceeds 100%.</p>'+saveBtn('Save ownership','saveOwnership()')+'</div>'); }
+async function saveOwnership(){ var h=(M.households||[])[0]; try{ await api('/api/ownership',{method:'POST',body:{household_id:h.id,record_type:document.getElementById('owType').value,record_id:parseInt(document.getElementById('owId').value),member_id:document.getElementById('owMember').value?parseInt(document.getElementById('owMember').value):null,ownership_type:document.getElementById('owOwn').value,allocation_basis:document.getElementById('owBasis').value,ownership_percent:parseFloat(document.getElementById('owPct').value)}}); closeModal(); await reload('family'); }catch(e){ toast(e.message,true); } }
+async function deleteOwnership(id){ try{ await api('/api/ownership/'+id,{method:'DELETE'}); await reload('family'); }catch(e){ toast(e.message,true); } }
+
 function renderBudgets() {
   var tab = new URLSearchParams(window.location.search).get("budgetTab") || "overview";
   var tabs = [["overview","Overview"],["categories","Category Budgets"],["cashflow","Cash Flow"],["recurring","Recurring"],["alerts","Alerts"],["trends","Trends"]].map(function(t){return '<a class="btn btn-sm '+(tab===t[0]?'btn-primary':'')+'" href="/?page=budgets&budgetTab='+t[0]+'" data-page="budgets" onclick="event.preventDefault(); var u=new URL(location.href); u.searchParams.set(\'page\',\'budgets\'); u.searchParams.set(\'budgetTab\',\''+t[0]+'\'); history.pushState({page:\'budgets\'},\'\',u); navigate(\'budgets\',false);">'+t[1]+'</a>';}).join('');

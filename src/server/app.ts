@@ -38,6 +38,11 @@ import importTemplates from "./routes/import-templates";
 import accountBalances from "./routes/account-balances";
 import accountReconciliations from "./routes/account-reconciliations";
 import income from "./routes/income";
+import households from "./routes/households";
+import householdMembers from "./routes/household-members";
+import ownership from "./routes/ownership";
+import movementAllocations from "./routes/movement-allocations";
+import householdSummary from "./routes/household-summary";
 
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 
@@ -168,6 +173,11 @@ app.route("/api/imports", imports);
 app.route("/api/import-templates", importTemplates);
 app.route("/api/account-balances", accountBalances);
 app.route("/api", income);
+app.route("/api", households);
+app.route("/api", householdMembers);
+app.route("/api", ownership);
+app.route("/api", movementAllocations);
+app.route("/api", householdSummary);
 app.route("/api/account-reconciliations", accountReconciliations);
 
 export { app };

@@ -1,0 +1,11 @@
+import { Hono } from 'hono';
+import type { Bindings, Variables } from '../types';
+import { audit, ensureDefaultHousehold } from '../ownership-service';
+const app=new Hono<{Bindings:Bindings;Variables:Variables}>();
+const types=['individual','family','joint','other'];
+function uid(c:any){return c.get('userId');}
+app.get('/households',async c=>{ const u=uid(c); await ensureDefaultHousehold(c.env.DB,u); const rows=(await c.env.DB.prepare('SELECT * FROM households WHERE user_id=? ORDER BY active DESC,id').bind(u).all()).results; return c.json(rows); });
+app.post('/households',async c=>{ const u=uid(c), b=await c.req.json(); if(!b.name)return c.json({error:'name required'},400); if(b.household_type&&!types.includes(b.household_type))return c.json({error:'invalid household_type'},400); const r:any=await c.env.DB.prepare('INSERT INTO households(user_id,name,base_currency,household_type,active) VALUES(?,?,?,?,?)').bind(u,b.name,b.base_currency||'IDR',b.household_type||'family',b.active===false?0:1).run(); await audit(c.env.DB,u,r.meta.last_row_id,'household',r.meta.last_row_id,'created','Household created'); return c.json(await c.env.DB.prepare('SELECT * FROM households WHERE user_id=? AND id=?').bind(u,r.meta.last_row_id).first(),201); });
+app.get('/households/:id',async c=>{ const r=await c.env.DB.prepare('SELECT * FROM households WHERE user_id=? AND id=?').bind(uid(c),c.req.param('id')).first(); return r?c.json(r):c.json({error:'Not found'},404); });
+app.put('/households/:id',async c=>{ const u=uid(c), id=c.req.param('id'), b=await c.req.json(); if(b.household_type&&!types.includes(b.household_type))return c.json({error:'invalid household_type'},400); await c.env.DB.prepare('UPDATE households SET name=COALESCE(?,name),base_currency=COALESCE(?,base_currency),household_type=COALESCE(?,household_type),active=COALESCE(?,active),updated_at=datetime(\'now\') WHERE user_id=? AND id=?').bind(b.name??null,b.base_currency??null,b.household_type??null,b.active==null?null:(b.active?1:0),u,id).run(); await audit(c.env.DB,u,Number(id),'household',Number(id),'edited','Household edited'); return c.json(await c.env.DB.prepare('SELECT * FROM households WHERE user_id=? AND id=?').bind(u,id).first()); });
+export default app;

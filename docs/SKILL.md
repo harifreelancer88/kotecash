@@ -829,3 +829,14 @@ KoteCash tracks expected income separately from the Ledger. **Actual income stil
 - **Dashboard and Budget integration**: `/api/dashboard` includes an `incomePlanning` compact summary. Budget and cash-flow services keep actual Ledger cash flow separate from expected income and use clean-income exclusions for refunds, reimbursements, loan proceeds, transfers, and investment redemptions.
 - **PennyWise/import integration**: imported and PennyWise-created reviewed Ledger credits can be candidate matches. Source provenance on the Ledger movement is preserved.
 - **Known limitations**: no payroll deductions, tax withholding, employer integrations, bank API connections, automatic movement creation, financial advice, or automatic category rewriting.
+
+### Family, household ownership, and shared expenses (Phase 22)
+KoteCash supports one authenticated owner managing a private household. Family members do **not** receive login accounts, invitations, roles, or shared workspaces.
+
+- Households: `GET /api/households`, `POST /api/households`, `GET /api/households/:id`, `PUT /api/households/:id`.
+- Members: `GET /api/households/:id/members`, `POST /api/households/:id/members`, `GET /api/household-members/:id`, `PUT /api/household-members/:id`, `DELETE /api/household-members/:id`. Delete archives members when financial dependencies exist.
+- Ownership: `GET /api/ownership`, `POST /api/ownership`, `PUT /api/ownership/:id`, `DELETE /api/ownership/:id`, `POST /api/ownership/preview`, `POST /api/ownership/apply`.
+- Shared expenses: `GET /api/movements/:id/allocations`, `POST /api/movements/:id/allocations`, `PUT /api/movement-allocations/:id`, `DELETE /api/movement-allocations/:id`.
+- Summaries: `GET /api/household/summary`, `GET /api/household/members/:id/summary`, `GET /api/household/net-worth`, `GET /api/household/cash-flow`, `GET /api/household/ownership-health`.
+
+Ownership records use `record_type` (`wallet`, `wealth_account`, `wealth_asset`, `liability`, `goal`, `income_source`, `budget`, `insurance_policy_future`, `other_asset`), `ownership_type` (`individual`, `joint`, `household`, `custodial`, `beneficiary`, `shared_expense`), and `allocation_basis` (`percentage`, `equal`, `full`, `informational`). Existing records with no explicit ownership resolve safely as the Self member at 100%, preserving IDs, Ledger movements, and historical values. Beneficiary rows are informational for present net worth. Shared expense allocations split an existing movement without changing or duplicating the original Ledger movement.
