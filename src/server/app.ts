@@ -33,6 +33,8 @@ import liabilityBalanceSnapshots from "./routes/liability-balance-snapshots";
 import goalLinks from "./routes/goal-links";
 import goalContributions from "./routes/goal-contributions";
 import pennywise from "./routes/pennywise";
+import imports from "./routes/imports";
+import importTemplates from "./routes/import-templates";
 
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 
@@ -159,6 +161,8 @@ app.route("/api/budgets", budgets);
 app.route("/api/cash-flow", cashFlow);
 app.route("/api/earmarks", earmarks);
 app.route("/api/integrations/pennywise", pennywise);
+app.route("/api/imports", imports);
+app.route("/api/import-templates", importTemplates);
 
 export { app };
 export default app;

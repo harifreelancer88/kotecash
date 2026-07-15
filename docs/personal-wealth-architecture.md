@@ -950,3 +950,7 @@ Goals intentionally do not create movements, investment transactions, liability 
 ## Phase 14 note: budgets and cash-flow insights
 
 Phase 14 adds monthly budgets, cash-flow summaries, category analytics, recurring-spend candidates, and deterministic alerts on top of the existing movement ledger. Ordinary income and expenses continue to come from `movements`; internal transfers, debt payments, and investment contributions are separated so they do not distort consumption budgets or savings-rate reporting. Investment contributions remain visible as wealth outflows, but they are not treated as ordinary expenses or investment recommendations.
+
+## Phase 15 statement imports note
+
+Phase 15 adds a reviewed statement-import layer beside the existing Wealth CSV importer. Generic financial import batches and rows track bank, credit-card, loan, mutual-fund, EPF, NPS, generic ledger, generic valuation, and generic liability CSV workflows from upload through mapping, preview, validation, duplicate/match review, commit, reconciliation, and rollback. Ledger movements remain authoritative for bank and card income/expense imports, while Wealth and liability imports are routed to their existing domain models only when explicitly confirmed. Rollback is intentionally narrow: it may remove only records created by a specific import batch and preserves matched pre-existing Ledger, PennyWise, Wealth, and liability records.

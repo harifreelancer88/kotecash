@@ -681,3 +681,36 @@ Optional query filters: `client_transaction_id`, `sms_fingerprint`, `from`, `to`
 ### Security and storage constraints
 
 Clients must send normalized fields, stable hashes, and masked account identifiers only. KoteCash rejects raw SMS body fields and stores no API tokens, secrets, or raw SMS text in `pennywise_sync_records`. Wallets and categories are ownership-validated for the authenticated user.
+
+## Statement Imports (Phase 15)
+
+KoteCash supports reviewed CSV statement-import workflows through `/api/imports` and `/api/import-templates`. The workflow is: upload → detect format → map columns → preview → validate → match existing records → resolve duplicates → commit → reconcile → roll back.
+
+Supported import types are `bank_statement`, `credit_card_statement`, `loan_statement`, `mutual_fund_statement`, `epf_statement`, `nps_statement`, `generic_ledger`, `generic_valuation`, and `generic_liability`.
+
+### Import APIs
+
+- `POST /api/imports/upload` accepts multipart CSV uploads up to 5 MB. It validates file type, computes a deterministic hash, detects headers, suggests an import type and mapping, stores masked row evidence, and rejects duplicate active file hashes.
+- `POST /api/imports/:id/mapping` saves user-confirmed column mapping, date format, amount convention, wallet/category defaults, opening/closing balances, and optionally saves a reusable template. Uploaded statement data is not stored inside templates.
+- `POST /api/imports/:id/preview` and `POST /api/imports/:id/validate` normalize rows, validate required date/amount/direction fields, detect duplicates, match existing movements/PennyWise records, and return reconciliation data.
+- `POST /api/imports/:id/commit` is idempotent at the row level. Bank, credit-card, and generic ledger rows can create Ledger movements only after mapping is valid. Probable/possible duplicates and matched existing rows are skipped unless the row is explicitly resolved as import-as-new. Loan/generic-liability rows can create liability payments only when a liability is explicitly supplied.
+- `POST /api/imports/:id/rollback` deletes only records created by that batch. It never deletes pre-existing matched records, PennyWise-linked records, user-created records, or records from another batch. If later dependencies block rollback, the API returns a dependency report.
+- `GET /api/imports`, `GET /api/imports/:id`, `GET /api/imports/:id/rows`, and `GET /api/imports/:id/reconciliation` inspect history, rows, and reconciliation.
+
+### Import templates
+
+- `GET /api/import-templates` returns built-in generic templates plus user templates.
+- `POST /api/import-templates`, `PUT /api/import-templates/:id`, and `DELETE /api/import-templates/:id` manage user-defined mapping templates.
+- Template fields include name, institution, import type, column mapping, date format, amount convention, header row, rows to skip, account mapping, wallet/category defaults, and active status.
+
+### Duplicate detection and matching
+
+Duplicate statuses are `new`, `exact_duplicate`, `probable_duplicate`, `possible_duplicate`, `matched_existing`, and `conflict`. Matching considers date, amount, direction, wallet/account, normalized description, reference, existing Ledger movements, and PennyWise-linked movements. Confidence values are `exact`, `high`, `medium`, `low`, and `unmatched`; low-confidence matches are not auto-linked.
+
+### Reconciliation
+
+Bank-style reconciliation calculates `expected_closing = opening_balance + imported_credits - imported_debits`, then compares it with the statement closing balance. Status is `reconciled`, `small_difference`, `unreconciled`, or `insufficient_data`. Credit-card and liability statements use the same reviewed summary pattern but do not modify balances or create snapshots automatically.
+
+### Privacy and unsupported formats
+
+CSV, UTF-8 CSV, BOM-prefixed CSV, CRLF/LF, quoted commas, multiline quoted cells, debit/credit columns, signed amounts, and separate amount/direction conventions are supported. XLSX, password-protected PDF, PDF OCR, bank API connections, scraping, email ingestion, and AI-only automatic imports are not supported in Phase 15. Account numbers and sensitive references are masked; passwords, OTPs, CVVs, PINs, and secrets are redacted.
