@@ -3,7 +3,7 @@
   function finite(n){return Number.isFinite(Number(n));}
   function money(v,decimals){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!Number.isFinite(n)) return '—'; var d=decimals==null?0:decimals; var out=new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',minimumFractionDigits:d,maximumFractionDigits:d}).format(Math.abs(n)); return n<0?'-'+out:out; }
   function qty(v){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!Number.isFinite(n)) return '—'; return n.toLocaleString('en-IN',{maximumFractionDigits:8}); }
-  function price(v){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!Number.isFinite(n)) return '—'; return '₹'+n.toLocaleString('en-IN',{maximumFractionDigits:8,minimumFractionDigits: n%1?2:0}); }
+  function price(v){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!Number.isFinite(n)) return '—'; return '₹'+n.toLocaleString('en-IN',{maximumFractionDigits:2,minimumFractionDigits: n%1?2:0}); }
   function pct(v){ if(v===null||v===undefined||!Number.isFinite(Number(v))) return '—'; return (Number(v)*100).toFixed(2)+'%'; }
   function typeLabel(t){return String(t||'').replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});}
   function splitHelp(){return 'Enter 2 for a 2-for-1 split.';}

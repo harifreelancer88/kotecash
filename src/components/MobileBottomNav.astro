@@ -66,6 +66,7 @@ const isMoreActive = !mainItems.some(item => isActive(item.id));
   })}
 
   <button id="mobile-more-btn"
+          aria-label="Open more navigation"
           class={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] transition-all duration-150 outline-none ${isMoreActive ? 'text-[var(--c-primary)] font-semibold' : 'text-[var(--c-sub)]'}`}>
     <Ellipsis class="w-5 h-5 mb-0.5" />
     <span>More</span>

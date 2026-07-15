@@ -6,6 +6,7 @@ import { getWealthAggregation } from "../wealth/valuation";
 import { liabilityTotals, dueStatus } from "../wealth/liabilities";
 import { calculateGoalProgress } from "../wealth/goals";
 import { summary as incomeSummary, endOfMonth as incomeEndOfMonth } from "../income-service";
+import { reconstructMonth } from "./networth";
 import {
   savingsRate,
   dtiRatio,
@@ -46,6 +47,7 @@ async function dtiTier(dti: number): Promise<[string, string]> {
 app.get("/dashboard", async (c: AppContext) => {
   const uid = c.get("userId");
   const month = c.req.query("month") || currentMonth();
+  const canonicalNetWorth = await reconstructMonth(c.env.DB, uid, month);
 
   // Lazy recurring sweep: materialize due templates before computing the month.
   try {
@@ -66,7 +68,7 @@ app.get("/dashboard", async (c: AppContext) => {
     }
   } catch (e) { /* sweep is best-effort; never block the dashboard */ }
 
-  const asOf = `${month}-31`;
+  const asOf = canonicalNetWorth.snapshot_date;
   const [wallets, cc, deposits, wealth, cicilan, mvRes, earmarks, phase11Liabilities] = await Promise.all([
     c.env.DB.prepare("SELECT id, initial_balance FROM wallets WHERE user_id = ?").bind(uid)
       .all<{ id: number; initial_balance: number }>(),
@@ -99,10 +101,10 @@ app.get("/dashboard", async (c: AppContext) => {
 
   const totalDeposits = deposits.results.reduce(
     (s, d) => s + accountBalance('deposit', d.id, d.amount, mv), 0);
-  const totalPortfolios = wealth.total;
-  const totalAssets = totalLiquid + totalDeposits + wealth.total;
-  const totalLiabilities = totalCC + totalCicilanSisa + phase11Liabilities.total;
-  const netWorth = totalAssets - totalLiabilities;
+  const totalPortfolios = canonicalNetWorth.wealthInvestmentValue;
+  const totalAssets = canonicalNetWorth.assets;
+  const totalLiabilities = canonicalNetWorth.liabilities;
+  const netWorth = canonicalNetWorth.netWorth;
   const upcomingEmi = phase11Liabilities.items.filter((l:any)=>l.next_due_date && l.next_due_date >= new Date().toISOString().slice(0,10)).sort((a:any,b:any)=>String(a.next_due_date).localeCompare(String(b.next_due_date)))[0] || null;
   const overdueAmount = phase11Liabilities.items.filter((l:any)=>dueStatus(l.next_due_date || l.due_date)==="overdue").reduce((s:number,l:any)=>s + (l.emi_amount || l.minimum_due || l.valuation.outstanding),0);
   const highestOutstandingLiability = phase11Liabilities.items.reduce((a:any,b:any)=>!a || b.valuation.outstanding > a.valuation.outstanding ? b : a, null);
@@ -139,13 +141,13 @@ app.get("/dashboard", async (c: AppContext) => {
     totalDeposits,
     totalPortfolios,
     totalAssets,
-    wealthInvestmentValue: wealth.total,
-    wealthHoldingsValue: wealth.holdings_value,
-    wealthManualSnapshotValue: wealth.manual_snapshot_value,
-    wealthValuationComplete: wealth.valuation_complete,
-    wealthWarnings: wealth.warnings,
+    wealthInvestmentValue: canonicalNetWorth.wealthInvestmentValue,
+    wealthHoldingsValue: canonicalNetWorth.wealthHoldingsValue,
+    wealthManualSnapshotValue: canonicalNetWorth.wealthManualSnapshotValue,
+    wealthValuationComplete: canonicalNetWorth.valuation_complete,
+    wealthWarnings: canonicalNetWorth.warnings,
     excludedWealthInvestmentValue: wealth.excluded_value,
-    assetBreakdown: { wallets: totalLiquid, deposits: totalDeposits, ...wealth.assetBreakdown },
+    assetBreakdown: { wallets: canonicalNetWorth.cash_total, deposits: canonicalNetWorth.other_assets_total, ...wealth.assetBreakdown },
     totalCicilanSisa,
     totalLiabilities,
     phase11LiabilitiesTotal: phase11Liabilities.total,
@@ -170,7 +172,8 @@ app.get("/dashboard", async (c: AppContext) => {
 app.get("/dashboard/financial-overview", async (c: AppContext) => {
   const uid = c.get("userId");
   const month = c.req.query("month") || currentMonth();
-  const asOf = c.req.query("as_of") || endOfMonth(month);
+  const canonicalNetWorth = await reconstructMonth(c.env.DB, uid, month);
+  const asOf = c.req.query("as_of") || canonicalNetWorth.snapshot_date;
   const trendMonths = Math.min(Math.max(Number(c.req.query("trend_months") || 6), 1), 12);
   const errors: Record<string, any> = {};
   const section = async <T>(name:string, fn:()=>Promise<T>, fallback:any=null) => { const r=await maybe(name,fn); if(r.error) errors[name]=r.error; return r.data ?? fallback; };
@@ -207,9 +210,9 @@ app.get("/dashboard/financial-overview", async (c: AppContext) => {
   const totalCC = cc.reduce((s:any,x:any)=>s+accountBalance('credit_card', x.id, x.balance, mv),0);
   const totalDeposits = deposits.reduce((s:any,d:any)=>s+accountBalance('deposit', d.id, d.amount, mv),0);
   const totalCicilan = cicilan.reduce((s:any,x:any)=>s+accountBalance('cicilan', x.id, x.total_utang, mv),0);
-  const assets = totalLiquid + totalDeposits + finiteNum(wealthAgg.total);
-  const liabilitiesTotal = totalCC + totalCicilan + finiteNum(liabSum.total);
-  const liveNetWorth = assets - liabilitiesTotal;
+  const assets = canonicalNetWorth.assets;
+  const liabilitiesTotal = canonicalNetWorth.liabilities;
+  const liveNetWorth = canonicalNetWorth.netWorth;
   const snaps = (nwSnapshots||[]).map((r:any)=>({month:r.snapshot_month||r.month, assets:r.assets_total??r.assets, liabilities:r.liabilities_total??r.liabilities, net_worth:r.net_worth, valuation_status:r.valuation_status, locked:!!r.locked, generated_at:r.generated_at||r.calculated_at||r.created_at})).filter((r:any)=>r.month).sort((a:any,b:any)=>a.month.localeCompare(b.month));
   const latestSnap = snaps.at(-1)||null, prevSnap = snaps.at(-2)||null, yStart = latestSnap ? snaps.find((s:any)=>s.month.slice(0,4)===latestSnap.month.slice(0,4)) : null;
 
@@ -249,9 +252,9 @@ app.get("/dashboard/financial-overview", async (c: AppContext) => {
 
   const response = {
     period: { month, as_of: asOf, currency: c.req.query('currency') || 'IDR', generated_at: new Date().toISOString() },
-    net_worth: { current_live_net_worth: liveNetWorth, current_live_assets: assets, current_live_liabilities: liabilitiesTotal, latest_locked_snapshot_net_worth: latestSnap?.locked ? latestSnap.net_worth : null, previous_month_net_worth: prevSnap?.net_worth ?? null, month_on_month_change: latestSnap&&prevSnap?latestSnap.net_worth-prevSnap.net_worth:null, month_on_month_percentage: latestSnap&&prevSnap?pctChange(latestSnap.net_worth,prevSnap.net_worth):null, year_to_date_change: latestSnap&&yStart?latestSnap.net_worth-yStart.net_worth:null, year_to_date_percentage: latestSnap&&yStart?pctChange(latestSnap.net_worth,yStart.net_worth):null, valuation_status: wealthAgg.valuation_complete===false?'partial':'complete', latest_snapshot_month: latestSnap?.month ?? null, trend: snaps.slice(-trendMonths) },
+    net_worth: { current_live_net_worth: liveNetWorth, current_live_assets: assets, current_live_liabilities: liabilitiesTotal, latest_locked_snapshot_net_worth: latestSnap?.locked ? latestSnap.net_worth : null, previous_month_net_worth: prevSnap?.net_worth ?? null, month_on_month_change: latestSnap&&prevSnap?latestSnap.net_worth-prevSnap.net_worth:null, month_on_month_percentage: latestSnap&&prevSnap?pctChange(latestSnap.net_worth,prevSnap.net_worth):null, year_to_date_change: latestSnap&&yStart?latestSnap.net_worth-yStart.net_worth:null, year_to_date_percentage: latestSnap&&yStart?pctChange(latestSnap.net_worth,yStart.net_worth):null, valuation_status: canonicalNetWorth.valuation_status, latest_snapshot_month: latestSnap?.month ?? null, trend: snaps.slice(-trendMonths), reconciliation: { wallet_cash: canonicalNetWorth.cash_total, wealth_investments: canonicalNetWorth.wealthInvestmentValue, other_assets: canonicalNetWorth.other_assets_total, liabilities: canonicalNetWorth.liabilities, total: canonicalNetWorth.netWorth } },
     cash_flow: { income: cash.total_income ?? null, ordinary_expenses: cash.total_expenses ?? null, debt_payments: cash.debt_payments ?? null, investment_contributions: cash.investment_contributions ?? null, net_cash_flow: cash.net_cash_flow ?? null, savings_amount: cash.savings_amount ?? null, savings_rate: cash.savings_rate ?? null, projected_month_end_result: cash.projected_month_end_surplus_or_deficit ?? null, previous_month_comparison: prevCash?{income_change:(cash.total_income??0)-(prevCash.total_income??0),expense_change:(cash.total_expenses??0)-(prevCash.total_expenses??0),net_cash_flow_change:(cash.net_cash_flow??0)-(prevCash.net_cash_flow??0)}:null, top_spending_category: topCat?{category_id:topCat.category_id,name:topCat.category_name,amount:topCat.current_month_spending}:null, fixed_expenses: cash.fixed_expenses ?? null, variable_expenses: cash.variable_expenses ?? null, discretionary_expenses: cash.discretionary_expenses ?? null },
-    wealth: { current_investment_value: wealthOv?.summary?.current_value ?? wealthAgg.total ?? null, total_invested: wealthOv?.summary?.total_invested ?? null, total_gain_loss: wealthOv?.summary?.total_gain ?? null, realised_gain: wealthOv?.summary?.realised_gain ?? null, unrealised_gain: wealthOv?.summary?.unrealised_gain ?? null, xirr: wealthOv?.summary?.xirr ?? null, valuation_completeness: wealthOv?.valuation_health ?? {status: wealthAgg.valuation_complete?'complete':'partial'}, open_holdings: wealthOv?.summary?.open_holdings ?? null, top_holding: wealthOv?.largest_holdings?.[0] ?? null, top_gainer: wealthOv?.top_gainers?.[0] ?? null, top_loser: wealthOv?.top_losers?.[0] ?? null, investment_change_since_previous_month: latestSnap&&prevSnap?(latestSnap.assets??0)-(prevSnap.assets??0):null, asset_allocation_summary: wealthOv?.allocations?.asset_type ?? wealthAgg.assetBreakdown ?? null },
+    wealth: { current_investment_value: wealthOv?.summary?.current_value ?? canonicalNetWorth.wealthInvestmentValue ?? null, market_holdings_value: wealthOv?.summary?.market_holdings_value ?? canonicalNetWorth.wealthHoldingsValue ?? null, other_investment_value: wealthOv?.summary?.other_investment_value ?? canonicalNetWorth.wealthManualSnapshotValue ?? null, total_invested: wealthOv?.summary?.total_invested ?? null, total_gain_loss: wealthOv?.summary?.total_gain ?? null, realised_gain: wealthOv?.summary?.realised_gain ?? null, unrealised_gain: wealthOv?.summary?.unrealised_gain ?? null, xirr: wealthOv?.summary?.xirr ?? null, valuation_completeness: wealthOv?.valuation_health ?? {status: canonicalNetWorth.valuation_complete?'complete':'partial'}, open_holdings: wealthOv?.summary?.open_holdings ?? null, top_holding: wealthOv?.largest_holdings?.[0] ?? null, top_gainer: wealthOv?.top_gainers?.[0] ?? null, top_loser: wealthOv?.top_losers?.[0] ?? null, investment_change_since_previous_month: latestSnap&&prevSnap?(latestSnap.assets??0)-(prevSnap.assets??0):null, asset_allocation_summary: wealthOv?.allocations?.asset_type ?? wealthAgg.assetBreakdown ?? null },
     liabilities: { total_outstanding: liabilitiesTotal, monthly_emi_commitment: liabItems.reduce((s:number,l:any)=>s+finiteNum(l.emi_amount||l.minimum_due),0)+cicilan.reduce((s:any,x:any)=>s+finiteNum(x.monthly_payment),0), upcoming_payment: nextLiab?{date:nextLiab.next_due_date||nextLiab.due_date,amount:nextLiab.emi_amount||nextLiab.minimum_due,name:nextLiab.name}:null, overdue_amount: overdueAmount, active_liabilities: liabItems.length+cicilan.length+cc.length, highest_interest_liability: liabItems.slice().sort((a:any,b:any)=>finiteNum(b.interest_rate)-finiteNum(a.interest_rate))[0]||null, credit_card_utilization_summary: cc.length?{cards:cc.length,total_balance:totalCC,total_limit:cc.reduce((s:any,x:any)=>s+finiteNum(x.limit_amount),0),utilization_percentage:cc.reduce((s:any,x:any)=>s+finiteNum(x.limit_amount),0)?totalCC/cc.reduce((s:any,x:any)=>s+finiteNum(x.limit_amount),0)*100:null}:null, debt_to_assets_ratio: assets?liabilitiesTotal/assets:null, payoff_progress: originalPrincipal?repaid/originalPrincipal*100:null },
     goals: { active_goals: active, completed_goals: completed, goals_on_track: onTrack, goals_behind: behind, high_priority_goals_behind: hiBehind, total_funded: funded, total_remaining: remaining, monthly_contribution_required: monthlyReq, next_target_date: goalDetails.map(g=>g.target_date).filter(Boolean).sort()[0]||null, top_three_priority_goals: goalDetails.slice(0,3), emergency_fund_coverage: null, debt_payoff_progress: originalPrincipal?repaid/originalPrincipal*100:null },
     budgets: { total_monthly_budget: budgetTotal, actual_spending: budgetActual, remaining_budget: budgetTotal-budgetActual, used_percentage: budgetTotal?budgetActual/budgetTotal*100:null, safe_to_spend_amount: budgetRows.reduce((s:any,b:any)=>s+finiteNum(b.daily_safe_to_spend),0), projected_result: budgetRows.reduce((s:any,b:any)=>s+finiteNum(b.effective_budget)-finiteNum(b.projected_month_end_spending),0), exceeded_categories: exceeded, approaching_limit_categories: approaching, monthly_savings_target: budgetRows.filter((b:any)=>b.budget_type==='savings_target').reduce((s:any,b:any)=>s+finiteNum(b.effective_budget),0), actual_savings: cash.savings_amount ?? null, difference: cash.savings_amount==null?null:cash.savings_amount-budgetRows.filter((b:any)=>b.budget_type==='savings_target').reduce((s:any,b:any)=>s+finiteNum(b.effective_budget),0) },

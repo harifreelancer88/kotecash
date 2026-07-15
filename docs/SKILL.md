@@ -341,6 +341,10 @@ Investment accounts are stored in `portfolios` and use `valuation_mode`:
 
 Historical calculations never use future prices. Missing prices mark valuation incomplete and the affected holding is excluded from market value; cost basis is not silently treated as market value. `include_in_net_worth=0` accounts are excluded from net-worth totals but may be reported separately. Amounts remain whole-INR integers.
 
+Canonical current net worth is produced by the shared monthly reconstruction service. For the current month it is valued as of today; for historical months it is valued as of month end. Dashboard live net worth and the Net Worth current value must both use this service and must not mix current balances with locked or generated snapshot totals unless the UI labels the value as historical.
+
+Canonical total investments are `market holdings + other Wealth investment value`. Market holdings are transaction-derived open holdings with prices. Other Wealth investment value includes active included EPF, NPS, PPF, SSY, fixed deposits, gold, manual-snapshot, hybrid fallback, and formula-valued accounts. Manual or legacy account values are included once through the shared Wealth aggregation service and are not added on top of account holdings.
+
 #### Dashboard fields
 
 `GET /api/dashboard` preserves existing fields and adds:
@@ -408,13 +412,14 @@ Manual fallback APIs are available for EOD CSV prices. `GET /api/wealth/market-p
 Returns a backend-calculated, dashboard-ready investment summary. Optional query parameters: `as_of=YYYY-MM-DD` and `account_id=<portfolio id>`.
 
 Response sections:
-- `summary`: `valuation_date`, `total_invested`, `current_value`, `realised_gain`, `unrealised_gain`, `total_gain`, `absolute_return_percent`, `xirr`, `xirr_status`, active/open/priced/missing/stale counts, `valuation_complete`, and UI-safe `warnings`.
+- `summary`: `valuation_date`, `total_invested`, `current_value`, `market_holdings_value`, `other_investment_value`, `manual_or_retirement_value`, `realised_gain`, `unrealised_gain`, `total_gain`, `absolute_return_percent`, `xirr`, `xirr_status`, active/open/priced/missing/stale counts, `valuation_complete`, and UI-safe `warnings`. `current_value` is total Wealth investments, not holdings-only value.
 - `valuation_health`: grouped status (`complete`, `partial`, `stale`, `unavailable`), priced/open/missing/stale counts, latest and oldest price dates, and readable `messages`.
 - `top_gainers`, `top_losers`, `largest_holdings`, `largest_cost_allocations`, `realised_gain_contributors`, `missing_price_holdings`, `stale_price_holdings`: ranked open holdings using backend holding formulas.
 - `allocations`: grouped by `asset`, `account`, `asset_type`, and `institution`, plus `unpriced_assets`.
 - `gain_loss`: realised/unrealised/total gain and positive, negative, flat, and unpriced holding counts.
 - `recent_transactions`: latest 10 investment transactions only.
 - `warnings`: raw/debug warning codes retained for API diagnostics, not for the main UI.
+- `investment_breakdown.provenance`: readable valuation provenance for non-holdings values such as EPF/manual accounts.
 
 Allocation rules:
 - Excludes inactive accounts, `include_in_net_worth=false` accounts, and closed holdings.
