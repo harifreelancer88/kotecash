@@ -946,3 +946,7 @@ Phase 11 introduces normalized liabilities for loans, credit cards, BNPL, overdr
 Phase 12 adds normalized financial goals as a planning/reporting layer above Wealth, Liabilities, Net Worth, wallets, and the movement ledger. Goals can be manually funded, linked to valued wealth accounts/assets, linked to liabilities for debt payoff tracking, or hybrid. Backend goal calculations own progress, inflation-adjusted target estimates, monthly contribution estimates, scenario comparisons, emergency-fund coverage, retirement estimates, debt-payoff progress, valuation warnings, and allocation-overlap warnings.
 
 Goals intentionally do not create movements, investment transactions, liability payments, or Net Worth changes. Goal contributions are informational links or manual annotations, not source ledgers. Deletion uses safeguards: goals with dependencies are cancelled rather than hard-deleted, and linked financial records remain untouched.
+
+## Phase 14 note: budgets and cash-flow insights
+
+Phase 14 adds monthly budgets, cash-flow summaries, category analytics, recurring-spend candidates, and deterministic alerts on top of the existing movement ledger. Ordinary income and expenses continue to come from `movements`; internal transfers, debt payments, and investment contributions are separated so they do not distort consumption budgets or savings-rate reporting. Investment contributions remain visible as wealth outflows, but they are not treated as ordinary expenses or investment recommendations.

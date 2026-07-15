@@ -130,10 +130,22 @@ The universal write primitive. One row per money movement.
 - A CC charge = `POST /api/movements` with `src_kind:"credit_card", src_id:<ccId>, dst_kind:null` (+ category). Paying the bill = `POST /api/wallets/transfer` with `dst_kind:"credit_card"`.
 - `DELETE` only when derived `balance == 0`
 
-### Budgets
-- `POST /api/budgets` → `{ category_id, budget_amount, month ("YYYY-MM") }`
-- `GET /api/budgets?month=2026-06` → each row includes computed `actual`, `remaining`, `status` (`UNDER`/`ON TRACK`/`OVER`)
-- Debt-service categories are auto-excluded
+### Budgets and cash-flow insights (Phase 14)
+- `POST /api/budgets` creates a budget without creating Ledger movements. Body supports `{ name, category_id, amount, budget_amount, month, start_date, end_date, budget_type, rollover_enabled, rollover_amount, alert_percent, status, notes }`. `budget_type` is `monthly_category`, `monthly_total`, `income_target`, `savings_target`, or `custom_period`; `status` is `active`, `paused`, or `archived`. Amounts must be positive finite integers.
+- `GET /api/budgets?month=2026-06&category_id=&status=&exceeded_only=true` returns backend-calculated rows with `base_amount`, `rollover_amount`, `effective_budget`, `actual_spending`, `remaining_amount`, `used_percentage`, `projected_month_end_spending`, `days_elapsed`, `days_remaining`, `daily_safe_to_spend`, `status`, and `warnings`.
+- `GET /api/budgets/:id`, `PUT /api/budgets/:id`, and `DELETE /api/budgets/:id` manage budgets. Delete archives the budget so history remains available.
+- `GET /api/budgets/summary` returns the same calculated budget rows for dashboard and budget overview screens.
+- `POST /api/budgets/copy-previous-month` and `POST /api/budgets/create-from-average` require preview mode before creating multiple budgets; existing active category/month budgets are not silently overwritten.
+- Rollover shows `base_amount`, `rollover_amount`, and `effective_budget`. Positive unused amounts may be carried manually; overspending is not automatically deducted from the next month.
+
+### Cash Flow — backend-calculated read-only APIs
+- `GET /api/cash-flow/monthly?month=YYYY-MM&wallet_id=&category_id=` returns monthly money-flow metrics. Definitions: income = outside→owned-account Ledger movements; ordinary expenses = owned-account→outside movements excluding investment/debt classifications; transfers = owned→owned movements and are excluded from income/expense; debt payments = wallet→cicilan/credit-card or debt-payment classified movements and are shown separately; investment contributions = portfolio-bound or investment-classified cash outflows and are shown separately from consumption.
+- Savings amount = `income − ordinary expenses − debt payments`. Savings rate = `savings amount / income`; it is `null` when income is zero.
+- `GET /api/cash-flow/categories?month=YYYY-MM` returns category analytics: current/previous month spend, change, averages, budget use, counts, largest transaction, recurring portion, and discretionary portion. Parent/child category support is represented by `parent_category_id` on budgets; API aggregation avoids adding the same movement twice.
+- `GET /api/cash-flow/trends?date_from=YYYY-MM&date_to=YYYY-MM&grouping=month` returns monthly cash-flow rows.
+- `GET /api/cash-flow/recurring-candidates` detects likely recurring expenses by similar merchant, similar amount, regular interval, and same wallet/category. It returns frequency, next expected date, confidence, monthly/annual equivalent cost, and `requires_confirmation:true`; it never creates recurring schedules automatically.
+- `GET /api/cash-flow/alerts` returns deterministic, explainable alerts such as budget threshold/exceeded, projected deficit, spending increase, unusual transaction, and low savings rate. Alerts are not professional financial advice.
+- Category classifications can be manually stored in `category_classifications` as `fixed`, `variable`, `discretionary`, `essential`, `debt_payment`, `investment`, `transfer`, or `income`; the app does not overwrite user categories automatically.
 
 ### Goals & Earmarks
 - `POST /api/goals` → `{ name, target_amount, icon }`
