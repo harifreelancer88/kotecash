@@ -120,7 +120,7 @@ async function loadAll() {
 
   M.goals = goals.map(function (g) {
     GMAP[g.name] = g.id;
-    return { id: g.id, name: g.name, target: g.target_amount, icon: g.icon };
+    return { id: g.id, name: g.name, target: g.target_amount, icon: g.icon || "target", goal_type: g.goal_type || "custom", priority: g.priority || "medium", status: g.status || "active", target_date: g.target_date, progress: g.progress || 0, pct: g.pct || 0, progress_details: g.progress_details || {} };
   });
 
   // flat earmarks, resolving source names
@@ -334,8 +334,8 @@ function renderDashboard() {
   }).join("")) || empty;
 
   var goalCards = (M.goals.length ? M.goals.map(function (g) {
-    var prog = goalProgress(g.name);
-    var pctD = g.target > 0 ? Math.min((prog / g.target * 100), 100) : 0;
+    var prog = g.progress || goalProgress(g.name);
+    var pctD = g.progress_details && g.progress_details.progress_percent != null ? g.progress_details.progress_percent : (g.target > 0 ? Math.min((prog / g.target * 100), 100) : 0);
     return '<div class="card p-3"><div class="flex items-center justify-between mb-1.5"><div class="flex items-center gap-1.5"><i data-lucide="' + (g.icon || "target") + '" class="w-3.5 h-3.5" style="color:var(--c-focus);"></i><span class="text-xs font-medium">' + g.name + '</span></div><span class="mono text-xs font-bold ' + (pctD >= 100 ? "text-[#4A8C6F]" : "text-[#355872]") + '">' + pctD.toFixed(0) + "%</span></div>" +
       '<div style="height:4px;border-radius:2px;margin-bottom:1px;background:var(--c-bg);"><div style="height:4px;border-radius:2px;width:' + pctD + "%;background:" + (pctD >= 100 ? "var(--c-success)" : "var(--c-focus)") + ';"></div></div>' +
       '<div class="text-[9px]" style="color:var(--c-sub);">Rp' + fmt(prog) + " / Rp" + fmt(g.target) + "</div></div>";
@@ -875,19 +875,19 @@ function toggleWalletDetail(card) { var d = card.querySelector(".wallet-detail")
 
 /* ── GOALS ── */
 function renderGoals() {
-  var totalEarmarked = M.earmarks.reduce(function (s, e) { return s + e.amount; }, 0);
+  var totalEarmarked = M.goals.reduce(function (s, g) { return s + (g.progress || 0); }, 0);
   var goalCards = M.goals.map(function (g, idx) {
-    var prog = goalProgress(g.name);
-    var pctD = g.target > 0 ? (prog / g.target * 100) : 0;
+    var prog = g.progress || goalProgress(g.name);
+    var pctD = g.progress_details && g.progress_details.progress_percent != null ? g.progress_details.progress_percent : (g.target > 0 ? (prog / g.target * 100) : 0);
     var rem = g.target - prog;
     var earmarkRows = M.earmarks.filter(function (e) { return e.goal === g.name; }).map(function (e) {
       return '<div class="flex items-center justify-between text-[11px] py-1 px-2 rounded" style="background:rgba(53,88,114,0.02);"><span style="color:var(--c-sub);">' + esc(e.source) + ' <button onclick="event.stopPropagation();deleteEarmark(' + e.id + ')" style="background:none;border:none;cursor:pointer;color:var(--c-sub);">×</button></span><span class="mono font-medium" style="color:var(--c-ink);">Rp' + fmt(e.amount) + "</span></div>";
     }).join("");
-    return '<div class="card p-5 mb-3"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;"><div class="flex items-center gap-3"><div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(122,170,206,0.10);"><i data-lucide="' + (g.icon || "target") + '" class="w-5 h-5" style="color:var(--c-focus);"></i></div><div><h3 class="font-semibold">' + esc(g.name) + ' <button onclick="showEditGoal(' + idx + ')" style="background:none;border:none;cursor:pointer;color:var(--c-sub);font-size:11px;margin-left:4px;"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></h3><p class="text-xs" style="color:var(--c-sub);">Target: Rp' + fmt(g.target) + '</p></div></div><div class="text-right"><div class="mono text-lg font-bold ' + (prog >= g.target ? "text-[#4A8C6F]" : "text-[#355872]") + '">Rp' + fmt(prog) + '</div><div class="text-[10px]" style="color:var(--c-sub);">' + pctD.toFixed(0) + "%</div></div></div>" +
-      '<div style="height:8px;border-radius:4px;margin-bottom:16px;background:var(--c-bg);"><div style="height:8px;border-radius:4px;width:' + Math.min(pctD, 100) + "%;background:" + (pctD >= 100 ? "var(--c-success)" : "var(--c-focus)") + ';"></div></div><div class="text-[10px] font-semibold uppercase mb-2" style="color:var(--c-sub);letter-spacing:0.05em;">Earmarked From</div>' + (earmarkRows || '<div class="text-xs" style="color:var(--c-sub);">No allocations yet</div>') + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;"><span class="text-xs" style="color:var(--c-sub);">' + (rem > 0 ? "Rp" + fmt(rem) + " remaining" : "Goal reached!") + '</span><button class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style="background:rgba(122,170,206,0.10);color:var(--c-focus);" onclick="event.stopPropagation();showAddEarmark(' + idx + ')"><i data-lucide="plus" class="w-3 h-3"></i> Allocate</button></div></div>';
+    return '<div class="card p-5 mb-3"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;"><div class="flex items-center gap-3"><div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(122,170,206,0.10);"><i data-lucide="' + (g.icon || "target") + '" class="w-5 h-5" style="color:var(--c-focus);"></i></div><div><h3 class="font-semibold">' + esc(g.name) + ' <button onclick="showEditGoal(' + idx + ')" style="background:none;border:none;cursor:pointer;color:var(--c-sub);font-size:11px;margin-left:4px;"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></h3><p class="text-xs" style="color:var(--c-sub);">Target: Rp' + fmt(g.target) + ' · ' + esc(g.goal_type || "custom") + '</p></div></div><div class="text-right"><div class="mono text-lg font-bold ' + (prog >= g.target ? "text-[#4A8C6F]" : "text-[#355872]") + '">Rp' + fmt(prog) + '</div><div class="text-[10px]" style="color:var(--c-sub);">' + pctD.toFixed(0) + "% · " + esc((g.progress_details && g.progress_details.status) || g.status || "active") + "</div></div></div>" +
+      '<div style="height:8px;border-radius:4px;margin-bottom:16px;background:var(--c-bg);"><div style="height:8px;border-radius:4px;width:' + Math.min(pctD, 100) + "%;background:" + (pctD >= 100 ? "var(--c-success)" : "var(--c-focus)") + ';"></div></div><div class="text-[10px] font-semibold uppercase mb-2" style="color:var(--c-sub);letter-spacing:0.05em;">Linked funding / warnings</div>' + (earmarkRows || '<div class="text-xs" style="color:var(--c-sub);">No allocations yet</div>') + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;"><span class="text-xs" style="color:var(--c-sub);">' + (rem > 0 ? "Rp" + fmt(rem) + " remaining" : "Goal reached!") + '</span><button class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style="background:rgba(122,170,206,0.10);color:var(--c-focus);" onclick="event.stopPropagation();showAddEarmark(' + idx + ')"><i data-lucide="plus" class="w-3 h-3"></i> Allocate</button></div></div>';
   }).join("");
-  return '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Goals</h1><p class="page-subtitle">Earmark money from wallets and assets toward your savings targets</p>' +
-    '<div class="card p-4 mb-4" style="display:flex;align-items:center;justify-content:space-between;"><div><div class="text-[10px] uppercase" style="color:var(--c-sub);">Total Earmarked</div><div class="mono text-lg font-bold text-[#355872]">Rp' + fmt(totalEarmarked) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">across ' + M.goals.length + ' goals</div></div><button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5" onclick="showAddGoal()"><i data-lucide="plus" class="w-4 h-4"></i> New Goal</button></div>' +
+  return '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Goals</h1><p class="page-subtitle">Financial goals, linked funding progress, and contribution planning</p>' +
+    '<div class="card p-4 mb-4" style="display:flex;align-items:center;justify-content:space-between;"><div><div class="text-[10px] uppercase" style="color:var(--c-sub);">Total Funded</div><div class="mono text-lg font-bold text-[#355872]">Rp' + fmt(totalEarmarked) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">gross across ' + M.goals.length + ' goals</div></div><button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-1.5" onclick="showAddGoal()"><i data-lucide="plus" class="w-4 h-4"></i> New Goal</button></div>' +
     (goalCards || '<div class="card-row"><span class="text-xs" style="color:var(--c-sub);">No goals yet</span></div>');
 }
 
@@ -1121,9 +1121,9 @@ async function saveWallet() { var name = document.getElementById("awName").value
 /* Goals & Earmarks */
 function showAddGoal() {
   var icons = ["graduation-cap", "map", "shield", "home", "heart", "briefcase", "car", "plane", "target"];
-  openModal("New Goal", '<div style="display:flex;flex-direction:column;gap:12px;">' + fld("ngName", "Goal Name", inp("text")) + fld("ngTarget", "Target (IDR)", inp("number")) + fld("ngIcon", "Icon", sel(icons.map(function (i) { return '<option value="' + i + '">' + i + "</option>"; }).join(""))) + saveBtn("Create Goal", "doAddGoal()") + "</div>");
+  var types = ["emergency_fund","retirement","child_education","home_purchase","vehicle_purchase","debt_payoff","vacation","wedding","major_purchase","custom"]; openModal("New Goal", '<div style="display:flex;flex-direction:column;gap:12px;">' + fld("ngType", "Goal Type", sel(types.map(function (i) { return '<option value="' + i + '">' + i.replace(/_/g," ") + "</option>"; }).join(""))) + fld("ngName", "Goal Name", inp("text")) + fld("ngTarget", "Target (IDR)", inp("number")) + fld("ngDate", "Target Date", inp("date")) + fld("ngPriority", "Priority", sel('<option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option>')) + fld("ngMode", "Funding Mode", sel('<option value="manual">Manual</option><option value="linked_assets">Linked assets</option><option value="hybrid">Hybrid</option>')) + fld("ngManual", "Current Manual Amount", inp("number")) + saveBtn("Create Goal", "doAddGoal()") + "</div>");
 }
-async function doAddGoal() { var name = document.getElementById("ngName").value, target = parseInt(document.getElementById("ngTarget").value) || 0; if (!name || !target) return; try { await api("/api/goals", { method: "POST", body: { name: name, target_amount: target, icon: document.getElementById("ngIcon").value } }); closeModal(); await reload("goals"); toast("Created"); } catch (e) { toast(e.message, true); } }
+async function doAddGoal() { var name = document.getElementById("ngName").value, target = parseInt(document.getElementById("ngTarget").value) || 0; if (!name || !target) return; try { await api("/api/goals", { method: "POST", body: { name: name, goal_type: document.getElementById("ngType").value, target_amount: target, target_date: document.getElementById("ngDate").value || null, priority: document.getElementById("ngPriority").value, funding_mode: document.getElementById("ngMode").value, current_manual_amount: parseInt(document.getElementById("ngManual").value) || 0 } }); closeModal(); await reload("goals"); toast("Created"); } catch (e) { toast(e.message, true); } }
 function showEditGoal(idx) {
   var g = M.goals[idx]; if (!g) return;
   var icons = ["graduation-cap", "map", "shield", "home", "heart", "briefcase", "car", "plane", "target"];

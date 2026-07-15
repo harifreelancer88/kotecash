@@ -1,92 +1,27 @@
 import { Hono } from "hono";
 import type { AppContext, Bindings, Variables } from "../types";
-import { goalProgress, type Earmark } from "../formulas";
+import { calculateGoalProgress, GOAL_TYPES, parseGoalBody, scenario } from "../wealth/goals";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const bad=(c:AppContext,e:any)=>c.json({error:e instanceof Error?e.message:String(e)},400);
+async function getGoal(c:AppContext,id:any){return c.env.DB.prepare('SELECT * FROM financial_goals WHERE user_id=? AND id=?').bind(c.get('userId'),id).first<any>();}
+async function hasFinancialGoals(c:AppContext){ try{ await c.env.DB.prepare('SELECT 1 FROM financial_goals LIMIT 1').first(); return true;}catch{return false;} }
 
-app.get("/", async (c: AppContext) => {
-  const uid = c.get("userId");
-  const goals = await c.env.DB.prepare(
-    "SELECT * FROM goals WHERE user_id = ? ORDER BY id"
-  )
-    .bind(uid)
-    .all<{ id: number; target_amount: number }>();
-  const earmarks = await c.env.DB.prepare(
-    "SELECT * FROM earmarks WHERE user_id = ?"
-  )
-    .bind(uid)
-    .all<Earmark & { id: number }>();
-
-  const out = goals.results.map((g) => {
-    const progress = goalProgress(g.id, earmarks.results);
-    const pct = g.target_amount > 0 ? progress / g.target_amount : 0;
-    return {
-      ...g,
-      progress,
-      pct,
-      reached: progress >= g.target_amount,
-      earmarks: earmarks.results.filter((e) => e.goal_id === g.id),
-    };
-  });
-  return c.json(out);
-});
-
-app.post("/", async (c: AppContext) => {
-  const uid = c.get("userId");
-  const body = await c.req.json();
-  if (!body.name || !body.target_amount || body.target_amount <= 0)
-    return c.json({ error: "Name and positive target required" }, 400);
-  const res = await c.env.DB.prepare(
-    "INSERT INTO goals (user_id, name, target_amount, icon) VALUES (?, ?, ?, ?)"
-  )
-    .bind(uid, body.name, body.target_amount, body.icon ?? "target")
-    .run();
-  return c.json({ id: res.meta.last_row_id }, 201);
-});
-
-app.put("/:id", async (c: AppContext) => {
-  const uid = c.get("userId");
-  const id = c.req.param("id");
-  const body = await c.req.json();
-  await c.env.DB.prepare(
-    "UPDATE goals SET name=?, target_amount=?, icon=? WHERE id=? AND user_id=?"
-  )
-    .bind(body.name, body.target_amount, body.icon ?? "target", id, uid)
-    .run();
-  return c.json({ success: true });
-});
-
-app.delete("/:id", async (c: AppContext) => {
-  const uid = c.get("userId");
-  const id = c.req.param("id");
-  await c.env.DB.batch([
-    c.env.DB.prepare("DELETE FROM earmarks WHERE goal_id=? AND user_id=?").bind(
-      id,
-      uid
-    ),
-    c.env.DB.prepare("DELETE FROM goals WHERE id=? AND user_id=?").bind(id, uid),
-  ]);
-  return c.json({ success: true });
-});
-
-app.post("/:id/allocate", async (c: AppContext) => {
-  const uid = c.get("userId");
-  const goalId = c.req.param("id");
-  const body = await c.req.json();
-  if (!body.amount || body.amount <= 0)
-    return c.json({ error: "Amount must be positive" }, 400);
-  const res = await c.env.DB.prepare(
-    "INSERT INTO earmarks (user_id, goal_id, source_type, source_id, amount) VALUES (?, ?, ?, ?, ?)"
-  )
-    .bind(
-      uid,
-      goalId,
-      body.source_type ?? "wallet",
-      body.source_id,
-      body.amount
-    )
-    .run();
-  return c.json({ id: res.meta.last_row_id }, 201);
-});
-
+app.get('/summary', async c=>{ if(!await hasFinancialGoals(c)) return c.json({active_goals:0,completed_goals:0,total_target_amount:0,total_funded_amount:0,total_remaining:0,goals_on_track:0,goals_behind:0,high_priority_goals_behind:0,monthly_contributions_required:0,nearest_target_date:null,gross_goal_funding:0,overlap_adjusted_funding:0,allocation_warnings:[]}); const uid=c.get('userId'); const rows=(await c.env.DB.prepare('SELECT * FROM financial_goals WHERE user_id=?').bind(uid).all<any>()).results; let s:any={active_goals:0,completed_goals:0,total_target_amount:0,total_funded_amount:0,total_remaining:0,goals_on_track:0,goals_behind:0,high_priority_goals_behind:0,monthly_contributions_required:0,nearest_target_date:null,emergency_fund_coverage:null,debt_payoff_progress:null,gross_goal_funding:0,overlap_adjusted_funding:0,allocation_warnings:[]}; for(const g of rows){ const p=await calculateGoalProgress(c.env.DB,uid,g); if(g.status==='active')s.active_goals++; if(g.status==='completed')s.completed_goals++; s.total_target_amount+=p.target_amount; s.total_funded_amount+=p.current_amount; s.gross_goal_funding+=p.current_amount; s.total_remaining+=p.remaining_amount; if(['on_track','achieved'].includes(p.status))s.goals_on_track++; if(['behind','slightly_behind'].includes(p.status)){s.goals_behind++; if(g.priority==='high')s.high_priority_goals_behind++;} s.monthly_contributions_required+=p.monthly_plan?.required_monthly_contribution||0; if(g.target_date&&(!s.nearest_target_date||g.target_date<s.nearest_target_date))s.nearest_target_date=g.target_date; if(p.emergency_fund)s.emergency_fund_coverage=p.emergency_fund; if(p.debt_payoff)s.debt_payoff_progress=p.debt_payoff; s.allocation_warnings.push(...p.warnings.filter((w:string)=>/allocation/i.test(w))); } s.overlap_adjusted_funding=s.total_funded_amount; return c.json(s); });
+app.get('/', async c=>{ const uid=c.get('userId'); if(!await hasFinancialGoals(c)){return c.json([]);} const wh=['user_id=?'], b:any[]=[uid]; for(const [q,col] of [['goal_type','goal_type'],['status','status'],['priority','priority']] as any){const v=c.req.query(q); if(v){wh.push(`${col}=?`); b.push(v);}} if(c.req.query('target_before')){wh.push('target_date<=?'); b.push(c.req.query('target_before'));} if(c.req.query('completed')==='true') wh.push("status='completed'"); const rows=(await c.env.DB.prepare(`SELECT * FROM financial_goals WHERE ${wh.join(' AND ')} ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,target_date,id`).bind(...b).all<any>()).results; const out=[]; for(const g of rows){ const p=await calculateGoalProgress(c.env.DB,uid,g); if(c.req.query('behind_only')==='true'&&!['behind','slightly_behind'].includes(p.status)) continue; out.push({...g,progress:p.current_amount,pct:p.progress_percent/100,reached:p.current_amount>=p.target_amount,progress_details:p,earmarks:[]}); } return c.json(out); });
+app.post('/', async c=>{ try{ const uid=c.get('userId'), g=parseGoalBody(await c.req.json()); if(g.goal_type==='emergency_fund'){ try{const m=g.metadata_json?JSON.parse(g.metadata_json):{}; if(m.average_essential_monthly_expenses&&m.desired_coverage_months&&!g.target_amount) g.target_amount=m.average_essential_monthly_expenses*m.desired_coverage_months;}catch{} } const r=await c.env.DB.prepare(`INSERT INTO financial_goals (user_id,name,goal_type,target_amount,target_date,current_manual_amount,funding_mode,priority,status,start_date,inflation_rate,expected_return_rate,monthly_contribution_override,include_existing_assets,notes,metadata_json,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='completed' THEN datetime('now') ELSE NULL END)`).bind(uid,...Object.values(g),g.status).run(); return c.json(await getGoal(c,r.meta.last_row_id),201);}catch(e){return bad(c,e);} });
+app.get('/:id',async c=>{const g=await getGoal(c,c.req.param('id')); return g?c.json({...g,progress_details:await calculateGoalProgress(c.env.DB,c.get('userId'),g)}):c.json({error:'Not found'},404);});
+app.put('/:id',async c=>{ try{ const uid=c.get('userId'), id=c.req.param('id'), old=await getGoal(c,id); if(!old)return c.json({error:'Not found'},404); const g=parseGoalBody(await c.req.json()); await c.env.DB.prepare(`UPDATE financial_goals SET name=?,goal_type=?,target_amount=?,target_date=?,current_manual_amount=?,funding_mode=?,priority=?,status=?,start_date=?,inflation_rate=?,expected_return_rate=?,monthly_contribution_override=?,include_existing_assets=?,notes=?,metadata_json=?,updated_at=datetime('now'),completed_at=CASE WHEN ?='completed' THEN COALESCE(completed_at,datetime('now')) ELSE CASE WHEN ?<>'completed' THEN NULL ELSE completed_at END END WHERE user_id=? AND id=?`).bind(...Object.values(g),g.status,g.status,uid,id).run(); return c.json(await getGoal(c,id)); }catch(e){return bad(c,e);} });
+app.delete('/:id',async c=>{const uid=c.get('userId'), id=c.req.param('id'); const deps:any={links:(await c.env.DB.prepare('SELECT COUNT(*) c FROM financial_goal_links WHERE user_id=? AND goal_id=?').bind(uid,id).first<any>())?.c||0,contributions:(await c.env.DB.prepare('SELECT COUNT(*) c FROM goal_contributions WHERE user_id=? AND goal_id=?').bind(uid,id).first<any>())?.c||0,historical_references:0,import_references:0}; if(Object.values(deps).some((x:any)=>x>0)){await c.env.DB.prepare("UPDATE financial_goals SET status='cancelled',updated_at=datetime('now') WHERE user_id=? AND id=?").bind(uid,id).run(); return c.json({soft_cancelled:true,dependency_report:deps},409);} await c.env.DB.prepare('DELETE FROM financial_goals WHERE user_id=? AND id=?').bind(uid,id).run(); return c.json({success:true});});
+app.get('/:id/progress',async c=>{const g=await getGoal(c,c.req.param('id')); return g?c.json(await calculateGoalProgress(c.env.DB,c.get('userId'),g)):c.json({error:'Not found'},404);});
+async function validateLink(c:AppContext,l:any,id?:any){ const uid=c.get('userId'); if(!await getGoal(c,l.goal_id))throw new Error('Goal not found'); const refs=[l.account_id,l.asset_id,l.liability_id].filter((x:any)=>x!=null); if(refs.length!==1)throw new Error('One valid reference required'); if(l.account_id&&!await c.env.DB.prepare('SELECT id FROM portfolios WHERE user_id=? AND id=?').bind(uid,l.account_id).first())throw new Error('Account not found'); if(l.asset_id&&!await c.env.DB.prepare('SELECT id FROM investment_assets WHERE user_id=? AND id=?').bind(uid,l.asset_id).first())throw new Error('Asset not found'); if(l.liability_id&&!await c.env.DB.prepare('SELECT id FROM liabilities WHERE user_id=? AND id=?').bind(uid,l.liability_id).first())throw new Error('Liability not found'); if(l.allocation_percent!=null&&(Number(l.allocation_percent)<0||Number(l.allocation_percent)>100||!Number.isFinite(Number(l.allocation_percent))))throw new Error('Invalid allocation_percent'); }
+function linkBody(b:any,gid?:any){return {goal_id:Number(gid??b.goal_id),link_type:b.link_type,account_id:b.account_id??null,asset_id:b.asset_id??null,liability_id:b.liability_id??null,allocation_percent:b.allocation_percent??null,fixed_allocation_amount:b.fixed_allocation_amount??null};}
+app.get('/:id/links',async c=>c.json({links:(await c.env.DB.prepare('SELECT * FROM financial_goal_links WHERE user_id=? AND goal_id=?').bind(c.get('userId'),c.req.param('id')).all()).results}));
+app.post('/:id/links',async c=>{try{const l=linkBody(await c.req.json(),c.req.param('id')); await validateLink(c,l); const r=await c.env.DB.prepare('INSERT INTO financial_goal_links (user_id,goal_id,link_type,account_id,asset_id,liability_id,allocation_percent,fixed_allocation_amount) VALUES (?,?,?,?,?,?,?,?)').bind(c.get('userId'),...Object.values(l)).run(); return c.json({id:r.meta.last_row_id,...l},201);}catch(e){return bad(c,e);}});
+app.post('/:id/calculate-plan',async c=>{const g=await getGoal(c,c.req.param('id')); return g?c.json((await calculateGoalProgress(c.env.DB,c.get('userId'),g)).monthly_plan):c.json({error:'Not found'},404);});
+app.post('/:id/scenarios',async c=>{const g=await getGoal(c,c.req.param('id')); if(!g)return c.json({error:'Not found'},404); const p=await calculateGoalProgress(c.env.DB,c.get('userId'),g); const b=await c.req.json(); const items=(b.scenarios||[b]).slice(0,3).map((x:any)=>scenario(g,p.current_amount,x)); return c.json({scenarios:items,disclaimer:'Estimates only; returns are not guaranteed.'});});
+app.get('/:id/contributions',async c=>c.json({contributions:(await c.env.DB.prepare('SELECT * FROM goal_contributions WHERE user_id=? AND goal_id=? ORDER BY contribution_date DESC,id DESC').bind(c.get('userId'),c.req.param('id')).all()).results}));
+app.post('/:id/contributions',async c=>{try{const uid=c.get('userId'), b=await c.req.json(), gid=c.req.param('id'); if(!await getGoal(c,gid))throw new Error('Goal not found'); if(b.movement_id&&!await c.env.DB.prepare('SELECT id FROM movements WHERE user_id=? AND id=?').bind(uid,b.movement_id).first())throw new Error('Movement not found'); if(b.investment_transaction_id&&!await c.env.DB.prepare('SELECT id FROM investment_transactions WHERE user_id=? AND id=?').bind(uid,b.investment_transaction_id).first())throw new Error('Investment transaction not found'); const r=await c.env.DB.prepare('INSERT INTO goal_contributions (user_id,goal_id,contribution_date,amount,source,movement_id,investment_transaction_id,notes) VALUES (?,?,?,?,?,?,?,?)').bind(uid,gid,b.contribution_date,Math.round(Number(b.amount)),b.source||'manual',b.movement_id??null,b.investment_transaction_id??null,b.notes??null).run(); return c.json({id:r.meta.last_row_id},201);}catch(e){return bad(c,e);}});
+app.post('/:id/allocate',async c=>bad(c,'Legacy earmarks are replaced by /api/goals/:id/links in Phase 12'));
+app.put('/goal-links/:id',async c=>bad(c,'Use /api/goal-links/:id'));
 export default app;

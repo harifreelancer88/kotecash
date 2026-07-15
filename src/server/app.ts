@@ -28,6 +28,8 @@ import wealthValuationSnapshots from "./routes/wealth-valuation-snapshots";
 import liabilities from "./routes/liabilities";
 import liabilityPayments from "./routes/liability-payments";
 import liabilityBalanceSnapshots from "./routes/liability-balance-snapshots";
+import goalLinks from "./routes/goal-links";
+import goalContributions from "./routes/goal-contributions";
 
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 
@@ -147,6 +149,8 @@ app.route("/api/wealth/ai-imports", wealthAiImports);
 app.route("/api/liabilities", liabilities);
 app.route("/api/liability-payments", liabilityPayments);
 app.route("/api/liability-balance-snapshots", liabilityBalanceSnapshots);
+app.route("/api/goal-links", goalLinks);
+app.route("/api/goal-contributions", goalContributions);
 app.route("/api/categories", categories);
 app.route("/api/budgets", budgets);
 app.route("/api/earmarks", earmarks);
