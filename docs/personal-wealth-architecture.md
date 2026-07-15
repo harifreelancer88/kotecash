@@ -954,3 +954,9 @@ Phase 14 adds monthly budgets, cash-flow summaries, category analytics, recurrin
 ## Phase 15 statement imports note
 
 Phase 15 adds a reviewed statement-import layer beside the existing Wealth CSV importer. Generic financial import batches and rows track bank, credit-card, loan, mutual-fund, EPF, NPS, generic ledger, generic valuation, and generic liability CSV workflows from upload through mapping, preview, validation, duplicate/match review, commit, reconciliation, and rollback. Ledger movements remain authoritative for bank and card income/expense imports, while Wealth and liability imports are routed to their existing domain models only when explicitly confirmed. Rollback is intentionally narrow: it may remove only records created by a specific import batch and preserves matched pre-existing Ledger, PennyWise, Wealth, and liability records.
+
+## Phase 16 note — unified financial dashboard
+
+Phase 16 adds a mobile-first Dashboard as the financial command center while keeping the existing module boundaries intact. The Dashboard reads from Ledger movements, Budget and cash-flow services, Wealth overview/performance, liabilities, goals, Net Worth snapshots, imports, and PennyWise sync records. It does not create financial records during load and does not introduce new advisory, tax, or external-data behavior.
+
+The new `GET /api/dashboard/financial-overview` endpoint distinguishes live current net worth from stored Net Worth snapshots and returns compact module summaries, ranked attention items, upcoming dated items, recent navigation activity, deterministic health indicators, section-level partial errors, and data freshness-oriented sync/import status.

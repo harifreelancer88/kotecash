@@ -714,3 +714,21 @@ Bank-style reconciliation calculates `expected_closing = opening_balance + impor
 ### Privacy and unsupported formats
 
 CSV, UTF-8 CSV, BOM-prefixed CSV, CRLF/LF, quoted commas, multiline quoted cells, debit/credit columns, signed amounts, and separate amount/direction conventions are supported. XLSX, password-protected PDF, PDF OCR, bank API connections, scraping, email ingestion, and AI-only automatic imports are not supported in Phase 15. Account numbers and sensitive references are masked; passwords, OTPs, CVVs, PINs, and secrets are redacted.
+
+### Unified Financial Dashboard (Phase 16)
+
+- `GET /api/dashboard/financial-overview?as_of=YYYY-MM-DD&month=YYYY-MM&trend_months=6&currency=IDR` returns a mobile-first dashboard payload assembled from existing backend services and module summaries.
+- The endpoint is authenticated and user-scoped. It does not create Ledger movements, Wealth transactions, liability payments, goal contributions, imports, PennyWise records, or Net Worth snapshots while loading.
+- Top-level sections are: `net_worth`, `cash_flow`, `wealth`, `liabilities`, `goals`, `budgets`, `alerts`, `upcoming`, `imports`, `pennywise`, `recent_activity`, `health`, `section_errors`, and `meta`.
+- `net_worth` clearly separates `current_live_net_worth` from stored snapshot fields such as `latest_locked_snapshot_net_worth`, `latest_snapshot_month`, and historical `trend`. Month-on-month and YTD comparisons are `null` when snapshot history is unavailable.
+- `cash_flow` reuses Phase 14 definitions: ordinary Ledger income/expenses exclude internal transfers, debt payments are separate, and investment contributions are separate from consumption spending.
+- `wealth` reuses Wealth Overview/performance values and returns valuation completeness, XIRR, open holdings, top holding/gainer/loser, and allocation summary. Missing or non-finite values are returned as `null`.
+- `liabilities`, `goals`, and `budgets` are compact summaries using existing liability, goal progress, and budget/cash-flow calculations. Linked liability payments and internal transfers are not double-counted as ordinary expenses.
+- `alerts.items` is a deterministic ranked attention feed. Severity order is `critical`, `high`, `medium`, `low`, `info`. Duplicate underlying issues are deduplicated by dashboard keys before sorting. `alerts.initial_items` contains the first five items for the Home screen.
+- `upcoming` contains only dated items already available in source modules and defaults to a 30-day horizon. It does not invent due dates.
+- Import health includes latest batch, unresolved rows, failed rows, unreconciled batches, rolled-back batches, and latest successful import. PennyWise health includes last sync, pending-review count, approved-ready count, failed count, duplicate count, and connection status.
+- `recent_activity` is a navigation feed labelled by source type; it is not an accounting stream and must not be used to compute financial totals.
+- `health` indicators are deterministic statuses (`good`, `watch`, `attention`, `unavailable`) with concise explanations, supporting metrics, and destination paths. They are not professional or personalized financial advice.
+- Partial failure behavior: independent sections are loaded in parallel where safe. If a non-critical section fails, the endpoint returns the remaining sections plus `section_errors.<section>` and `meta.partial: true`; it does not log financial payloads.
+- Freshness rules: dashboard data health surfaces stale or missing valuations, unresolved imports, PennyWise sync failures, and unavailable snapshot comparisons through attention items and health indicators rather than raw internal timestamps.
+- Navigation structure remains compact: Home/Dashboard links to full modules instead of duplicating full tables. Mobile primary navigation should keep Home, Ledger, Wealth, and More-style access to Budget, Liabilities, Goals, Net Worth, Imports, PennyWise, and Settings according to the current app conventions.

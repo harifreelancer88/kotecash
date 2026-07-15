@@ -12,7 +12,7 @@ var M = {
   cicilan: [], txns: [], networth: [], goals: [], earmarks: [],
   budgets: [], budgetSummary: [], cashFlow: {}, cashFlowCategories: [], cashFlowAlerts: [], recurringCandidates: [], expenseCats: [], incomeCats: [],
   recurring: [], liabilities: [], liabilitySummary: {},
-  dashboard: {},
+  dashboard: {}, financialOverview: null,
 };
 
 // name/id resolution maps
@@ -80,11 +80,11 @@ async function loadAll() {
     api("/api/categories"), api("/api/wallets"), api("/api/credit-cards"),
     api("/api/deposits"), api("/api/portfolios"), api("/api/cicilan"),
     api("/api/goals"), api("/api/budgets"), api("/api/transactions"),
-    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"), api("/api/liabilities"), api("/api/liabilities/summary"), api("/api/budgets/summary"), api("/api/cash-flow/monthly"), api("/api/cash-flow/categories"), api("/api/cash-flow/alerts"), api("/api/cash-flow/recurring-candidates"),
+    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"), api("/api/liabilities"), api("/api/liabilities/summary"), api("/api/budgets/summary"), api("/api/cash-flow/monthly"), api("/api/cash-flow/categories"), api("/api/cash-flow/alerts"), api("/api/cash-flow/recurring-candidates"), api("/api/dashboard/financial-overview"),
   ]);
   var cats = data[0], wallets = data[1], ccs = data[2], deps = data[3],
     ports = data[4], cics = data[5], goals = data[6], buds = data[7],
-    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {}, liabilities = data[13] || {}, liabilitySummary = data[14] || {}, budgetSummary = data[15] || [], cashFlow = data[16] || {}, cashFlowCategories = data[17] || [], cashFlowAlerts = data[18] || [], recurringCandidates = data[19] || [];
+    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {}, liabilities = data[13] || {}, liabilitySummary = data[14] || {}, budgetSummary = data[15] || [], cashFlow = data[16] || {}, cashFlowCategories = data[17] || [], cashFlowAlerts = data[18] || [], recurringCandidates = data[19] || [], financialOverview = data[20] || null;
 
   cats.forEach(function (c) { CATMAP[c.name] = c.id; });
   M.expenseCats = cats.filter(function (c) { return c.type === "expense"; }).map(function (c) { return c.name; });
@@ -141,7 +141,7 @@ async function loadAll() {
   });
 
   M.income = dash.income; M.expense = dash.expense; M.net = dash.sisa;
-  M.savingsRate = cashFlow.savings_rate ?? dash.savingsRate; M.dti = dash.dti; M.dashboard = dash || {}; M.budgetSummary = budgetSummary; M.cashFlow = cashFlow; M.cashFlowCategories = cashFlowCategories; M.cashFlowAlerts = cashFlowAlerts; M.recurringCandidates = recurringCandidates;
+  M.savingsRate = cashFlow.savings_rate ?? dash.savingsRate; M.dti = dash.dti; M.dashboard = dash || {}; M.financialOverview = financialOverview; M.budgetSummary = budgetSummary; M.cashFlow = cashFlow; M.cashFlowCategories = cashFlowCategories; M.cashFlowAlerts = cashFlowAlerts; M.recurringCandidates = recurringCandidates;
 
   M.networth = ((nws.snapshots && nws.snapshots.length) ? nws.snapshots.slice().reverse() : (nw.snapshots || [])).map(function (s) {
     var br = s.breakdown || {};
@@ -327,79 +327,27 @@ async function toast(msg, isErr) {
    ================================================================= */
 
 function renderDashboard() {
-  var health = healthBadge(M.savingsRate);
-  var dtiTier = M.dti < 0.3
-    ? ["Healthy", "text-[#4A8C6F]"]
-    : M.dti < 0.5 ? ["High", "text-[#D4A24E]"] : ["Critical", "text-[#C44B4B]"];
-
-  var totalLiquid = M.dashboard.totalLiquid ?? M.wallets.reduce(function (s, w) { return s + walletBalance(w.name); }, 0);
-  var totalCC = M.dashboard.totalCC ?? M.creditCards.reduce(function (s, c) { return s + c.balance; }, 0);
-  var totalDep = M.dashboard.totalDeposits ?? M.deposits.reduce(function (s, d) { return s + d.amount; }, 0);
-  var totalPorto = M.dashboard.wealthInvestmentValue ?? M.dashboard.totalPortfolios ?? M.portfolios.reduce(function (s, p) { return s + p.value; }, 0);
-  var totalAssets = M.dashboard.totalAssets ?? (totalLiquid + totalDep + totalPorto);
-  var totalCicilanSisa = M.dashboard.totalCicilanSisa ?? M.cicilan.reduce(function (s, c) { return s + c.sisa; }, 0);
-  var netWorth = M.dashboard.netWorth ?? (totalAssets - totalCC - totalCicilanSisa);
-  var totalEarmarked = M.earmarks.reduce(function (s, e) { return s + e.amount; }, 0);
-  var walletEarmarked = M.earmarks.filter(function (e) { return isWalletSource(e.source); })
-    .reduce(function (s, e) { return s + e.amount; }, 0);
-  var totalFree = totalLiquid - walletEarmarked;
-
-  var budgetRows = M.budgets.slice(0, 4).map(function (b) {
-    var pctUsed = b.budget > 0 ? b.actual / b.budget : 0;
-    var st = budgetBadge(b.actual, b.budget);
-    return (
-      '<div class="card-row">' +
-        '<span class="text-xs font-medium flex-shrink-0" style="color:var(--c-ink);width:64px;">' + b.cat + "</span>" +
-        '<div class="flex-1 rounded-full h-1.5 min-w-[60px]" style="background:var(--c-bg);">' +
-          '<div class="h-1.5 rounded-full" style="width:' + Math.min(pctUsed * 100, 100) + "%;background:" + (pctUsed > 1 ? "var(--c-danger)" : "var(--c-focus)") + ';"></div></div>' +
-        '<span class="mono text-[11px] text-right flex-shrink-0" style="width:84px;">Rp' + fmt(b.actual) + "</span>" +
-        '<span class="' + st[1] + ' flex items-center gap-1 flex-shrink-0" style="font-size:10px;"><i data-lucide="' + st[2] + '" class="w-3 h-3"></i> ' + st[0] + "</span>" +
-      "</div>"
-    );
-  }).join("");
-
-  var empty = '<div class="card-row"><span class="text-xs" style="color:var(--c-sub);">No data yet</span></div>';
-
-  var cicilanRows = (M.cicilan.filter(function (c) { return c.status === "active"; }).map(function (c) {
-    return '<div class="card-row"><i data-lucide="landmark" class="w-3.5 h-3.5 flex-shrink-0" style="color:var(--c-sub);"></i><span class="text-xs font-medium flex-1" style="color:var(--c-ink);">' + c.name + ' <span style="color:var(--c-sub);font-weight:400;">due ' + (c.due || "").slice(0,10) + '</span></span><span class="mono text-xs flex-shrink-0">Rp' + fmt(c.monthly) + "/mo</span></div>";
-  }).join("")) || empty;
-
-  var ccUpcoming = (M.creditCards.map(function (c) {
-    return '<div class="card-row"><i data-lucide="credit-card" class="w-3.5 h-3.5 flex-shrink-0" style="color:var(--c-sub);"></i><span class="text-xs font-medium flex-1" style="color:var(--c-ink);">' + c.name + ' <span style="color:var(--c-sub);font-weight:400;">due day ' + c.dueDay + '</span></span><span class="mono text-xs flex-shrink-0 ' + (c.balance > 0 ? "text-[#C44B4B]" : "") + '">Rp' + fmt(c.balance) + "</span></div>";
-  }).join("")) || empty;
-
-  var goalCards = (M.goals.length ? M.goals.map(function (g) {
-    var prog = g.progress || goalProgress(g.name);
-    var pctD = g.progress_details && g.progress_details.progress_percent != null ? g.progress_details.progress_percent : (g.target > 0 ? Math.min((prog / g.target * 100), 100) : 0);
-    return '<div class="card p-3"><div class="flex items-center justify-between mb-1.5"><div class="flex items-center gap-1.5"><i data-lucide="' + (g.icon || "target") + '" class="w-3.5 h-3.5" style="color:var(--c-focus);"></i><span class="text-xs font-medium">' + g.name + '</span></div><span class="mono text-xs font-bold ' + (pctD >= 100 ? "text-[#4A8C6F]" : "text-[#355872]") + '">' + pctD.toFixed(0) + "%</span></div>" +
-      '<div style="height:4px;border-radius:2px;margin-bottom:1px;background:var(--c-bg);"><div style="height:4px;border-radius:2px;width:' + pctD + "%;background:" + (pctD >= 100 ? "var(--c-success)" : "var(--c-focus)") + ';"></div></div>' +
-      '<div class="text-[9px]" style="color:var(--c-sub);">Rp' + fmt(prog) + " / Rp" + fmt(g.target) + "</div></div>";
-  }).join("") : '<div class="text-xs" style="color:var(--c-sub);">No goals yet</div>');
-
-  return (
-    '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Home</h1>' +
-    '<div class="flex items-center justify-between mb-2"><p class="page-subtitle" style="margin-bottom:0;">Your financial snapshot</p><div class="flex gap-2 flex-shrink-0"><select id="dashMonth" class="select select-sm bg-white text-xs" style="border-color:var(--c-focus);"><option>This Month</option><option>Last Month</option><option>Next Month</option><option>All Time</option></select><select id="dashYear" class="select select-sm bg-white text-xs" style="border-color:var(--c-focus);"><option>2026</option><option>2025</option><option>2027</option></select></div></div>' +
-    '<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">' +
-      '<div class="card p-4 min-w-0"><div class="text-[10px] uppercase tracking-wide mb-1" style="color:var(--c-sub);">Income</div><div class="text-base sm:text-lg font-bold mono break-words" style="color:var(--c-success);">Rp' + fmt(M.income) + '</div><div class="text-[11px] mt-0.5" style="color:var(--c-sub);">this month</div></div>' +
-      '<div class="card p-4 min-w-0"><div class="text-[10px] uppercase tracking-wide mb-1" style="color:var(--c-sub);">Expense</div><div class="text-base sm:text-lg font-bold mono break-words" style="color:var(--c-danger);">Rp' + fmt(M.expense) + '</div><div class="text-[11px] mt-0.5" style="color:var(--c-sub);">' + (M.income > 0 ? pct(M.expense / M.income) : "0%") + ' of income</div></div>' +
-      '<div class="card p-4 min-w-0"><div class="text-[10px] uppercase tracking-wide mb-1" style="color:var(--c-sub);">Sisa</div><div class="text-base sm:text-lg font-bold mono break-words ' + (M.net >= 0 ? "text-[#4A8C6F]" : "text-[#C44B4B]") + '">' + (M.net < 0 ? "−" : "") + "Rp" + fmt(Math.abs(M.net)) + '</div><div class="text-[11px] mt-0.5" style="color:var(--c-sub);">income − expense</div></div>' +
-    "</div>" +
-    '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">' +
-      '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="wallet" class="w-3.5 h-3.5" style="color:var(--c-focus);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Liquid</span></div><div class="text-lg font-bold mono ' + (totalLiquid >= 0 ? "text-[#4A8C6F]" : "text-[#C44B4B]") + '">Rp' + fmt(totalLiquid) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">' + M.wallets.length + ' wallets</div><div class="flex gap-2 mt-2 pt-2 text-[9px]" style="border-top:1px solid var(--c-border);"><div><span style="color:var(--c-sub);">Free </span><span class="mono font-medium ' + (totalFree >= 0 ? "text-[#4A8C6F]" : "text-[#C44B4B]") + '">Rp' + fmt(totalFree) + '</span></div><div><span style="color:var(--c-sub);">Earmarked </span><span class="mono font-medium" style="color:var(--c-focus);">Rp' + fmt(totalEarmarked) + "</span></div></div></div>" +
-      '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="credit-card" class="w-3.5 h-3.5" style="color:var(--c-danger);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">CC Debt</span></div><div class="text-lg font-bold mono" style="color:var(--c-danger);">Rp' + fmt(totalCC) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">' + M.creditCards.length + " cards</div></div>" +
-      '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="briefcase" class="w-3.5 h-3.5" style="color:var(--c-focus);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Assets</span></div><div class="text-lg font-bold mono" style="color:var(--c-ink);">Rp' + fmt(totalAssets) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">cash + deposits + investments</div></div>' +
-      '<div class="card p-4"><div class="flex items-center gap-1.5 mb-2"><i data-lucide="line-chart" class="w-3.5 h-3.5" style="color:var(--c-primary);"></i><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Net Worth</span></div><div class="text-lg font-bold mono ' + (netWorth >= 0 ? "text-[#4A8C6F]" : "text-[#C44B4B]") + '">' + (netWorth < 0 ? "−" : "") + "Rp" + fmt(Math.abs(netWorth)) + '</div><div class="text-[9px] mt-0.5" style="color:var(--c-sub);">' + (netWorth >= 0 ? "positive" : "negative") + "</div></div>" +
-    "</div>" +
-    '<div class="card p-4 mb-6"><div class="flex items-center justify-between gap-3"><div><div class="text-[10px] uppercase tracking-wide mb-1" style="color:var(--c-sub);">Investments</div><div class="text-xl font-bold mono" style="color:var(--c-primary);">Rp' + fmt(totalPorto) + '</div><div class="text-[11px] mt-1" style="color:var(--c-sub);">Wealth value included in net worth · <a href="/?page=wealth" data-page="wealth" style="color:var(--c-focus);">open Wealth</a></div></div><span class="text-[10px] px-2 py-1 rounded-full" style="background:' + (M.dashboard.wealthValuationComplete === false ? 'rgba(212,162,78,.14);color:var(--c-warning);' : 'rgba(74,140,111,.12);color:var(--c-success);') + '">' + (M.dashboard.wealthValuationComplete === false ? 'Warnings' : 'Complete') + '</span></div></div>' +
-    '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">' +
-      '<div class="card p-4 min-w-0"><div class="flex items-center justify-between gap-2 mb-2"><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Monthly Flow</span><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ' + health[1] + '"><i data-lucide="' + health[2] + '" class="w-3 h-3"></i> ' + health[0] + '</span></div><div class="text-xl font-bold mono" style="color:var(--c-ink);">' + pct(M.savingsRate) + '</div><div class="text-[11px] mt-1" style="color:var(--c-sub);">' + (M.income > 0 ? pct(M.expense / M.income) : "0%") + " spent · Rp" + fmt(M.net) + " sisa · Rp" + fmt(totalEarmarked) + " earmarked</div></div>" +
-      '<div class="card p-4 min-w-0"><div class="flex items-center justify-between gap-2 mb-2"><span class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Debt-to-Income</span><span class="text-[10px] font-semibold flex-shrink-0 ' + dtiTier[1] + '">' + dtiTier[0] + '</span></div><div class="text-xl font-bold mono ' + dtiTier[1] + '">' + pct(M.dti) + '</div><div class="text-[11px] mt-1" style="color:var(--c-sub);">Rp' + fmt(M.cicilan.reduce(function (s, c) { return s + c.monthly; }, 0)) + "/mo debt payments</div></div>" +
-    "</div>" +
-    '<div class="section-title">Goals</div>' +
-    '<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">' + goalCards + "</div>" +
-    '<div class="section-title">Budgets</div>' + (budgetRows || empty) +
-    '<div class="section-title mt-6">Upcoming Payments</div>' + cicilanRows + ccUpcoming
-  );
+  var fo = M.financialOverview;
+  if (!fo) return '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Home</h1><div class="card p-4">Dashboard data is loading.</div>';
+  var nw = fo.net_worth || {}, cf = fo.cash_flow || {}, we = fo.wealth || {}, li = fo.liabilities || {}, go = fo.goals || {}, bu = fo.budgets || {}, al = fo.alerts || {}, im = fo.imports || {}, pw = fo.pennywise || {}, hh = fo.health || {};
+  function money(v){ return v == null ? '—' : (v < 0 ? '−Rp' + fmt(Math.abs(v)) : 'Rp' + fmt(v)); }
+  function smallMetric(label, value, extra){ return '<div class="card p-3 min-w-0"><div class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">'+label+'</div><div class="text-base font-bold mono break-words" style="color:var(--c-ink);">'+value+'</div>'+(extra?'<div class="text-[11px] mt-1" style="color:var(--c-sub);">'+extra+'</div>':'')+'</div>'; }
+  function action(label,path,icon){ return '<a class="btn btn-sm min-h-[44px] h-auto justify-start" href="'+path+'" data-page="'+((path.match(/page=([^&]+)/)||[])[1]||'dashboard')+'"><i data-lucide="'+icon+'" class="w-4 h-4"></i> '+label+'</a>'; }
+  function statusPill(s){ var c=s==='good'?'var(--c-success)':s==='attention'?'var(--c-danger)':s==='watch'?'var(--c-warning)':'var(--c-sub)'; return '<span class="text-[10px] px-2 py-1 rounded-full" style="background:rgba(53,88,114,.06);color:'+c+';">'+esc(s||'unavailable')+'</span>'; }
+  var trend = (nw.trend||[]).slice(-6); var max = Math.max.apply(null, trend.map(function(t){return Math.abs(t.net_worth||0);}).concat([1]));
+  var bars = trend.map(function(t){ var h=Math.max(8, Math.round(Math.abs(t.net_worth||0)/max*42)); return '<div class="flex flex-col items-center gap-1" aria-label="'+esc(t.month)+' net worth '+money(t.net_worth)+'"><div style="height:'+h+'px;width:12px;border-radius:6px;background:'+(t.net_worth>=0?'var(--c-success)':'var(--c-danger)')+';"></div><span class="text-[9px]" style="color:var(--c-sub);">'+esc((t.month||'').slice(5))+'</span></div>'; }).join('');
+  var attention = (al.initial_items||[]).slice(0,5).map(function(a){ return '<div class="card-row items-start"><span class="text-[10px] px-2 py-1 rounded-full flex-shrink-0" style="background:rgba(196,75,75,.08);color:var(--c-danger);">'+esc(a.severity)+'</span><div class="min-w-0 flex-1"><div class="text-sm font-semibold">'+esc(a.title)+'</div><div class="text-xs truncate" style="color:var(--c-sub);">'+esc(a.explanation)+'</div></div><a class="btn btn-xs min-h-[36px]" href="'+esc(a.destination_path||'/')+'" data-page="'+(((a.destination_path||'').match(/page=([^&]+)/)||[])[1]||'dashboard')+'">Open</a></div>'; }).join('') || '<div class="card p-4 text-sm" style="color:var(--c-sub);">No attention items right now.</div>';
+  var upcoming = (fo.upcoming||[]).slice(0,5).map(function(u){ return '<div class="card-row"><div class="min-w-0 flex-1"><div class="text-sm font-medium truncate">'+esc(u.title||u.type)+'</div><div class="text-xs" style="color:var(--c-sub);">'+esc(u.type)+' · '+esc(u.date)+'</div></div><div class="mono text-xs">'+money(u.amount)+'</div></div>'; }).join('') || '<div class="card p-4 text-sm" style="color:var(--c-sub);">No dated items in the next 30 days.</div>';
+  var activity = (fo.recent_activity||[]).slice(0,8).map(function(a){ return '<div class="card-row"><div class="min-w-0 flex-1"><div class="text-sm font-medium truncate">'+esc(a.title||a.source_type)+'</div><div class="text-xs" style="color:var(--c-sub);">'+esc(a.source_type)+' · '+esc(a.date_time)+' · '+esc(a.status||'')+'</div></div><div class="mono text-xs">'+money(a.amount)+'</div></div>'; }).join('') || '<div class="card p-4 text-sm" style="color:var(--c-sub);">No recent activity.</div>';
+  var healthCards = Object.keys(hh).map(function(k){ var h=hh[k]||{}; return '<div class="card p-3"><div class="flex items-center justify-between gap-2"><div class="text-xs font-semibold">'+esc(k.replace(/_/g,' '))+'</div>'+statusPill(h.status)+'</div><p class="text-[11px] mt-1" style="color:var(--c-sub);">'+esc(h.explanation||'')+'</p></div>'; }).join('');
+  return '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Home</h1><p class="page-subtitle">Unified financial command center</p>'+
+    '<section class="card p-4 mb-4" aria-labelledby="dashHero"><div class="flex items-start justify-between gap-3"><div><h2 id="dashHero" class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Net Worth</h2><div class="text-2xl font-bold mono" style="color:var(--c-primary);">'+money(nw.current_live_net_worth)+'</div><div class="text-xs mt-1" style="color:var(--c-sub);">Live value · latest snapshot '+esc(nw.latest_snapshot_month||'unavailable')+' · '+esc(nw.valuation_status||'unknown')+'</div></div><a class="btn btn-sm min-h-[44px]" href="/?page=networth" data-page="networth">View Net Worth</a></div><div class="flex items-end gap-2 mt-3" role="img" aria-label="Compact net-worth trend">'+(bars||'<span class="text-xs" style="color:var(--c-sub);">No snapshot trend yet</span>')+'</div><div class="grid grid-cols-2 gap-2 mt-3">'+smallMetric('Monthly change', money(nw.month_on_month_change), nw.month_on_month_percentage==null?'No comparison':pct(nw.month_on_month_percentage/100))+smallMetric('YTD change', money(nw.year_to_date_change), nw.year_to_date_percentage==null?'No comparison':pct(nw.year_to_date_percentage/100))+'</div></section>'+
+    '<section class="mb-4"><div class="flex items-center justify-between mb-2"><h2 class="section-title" style="margin:0;">This Month</h2><a class="btn btn-sm min-h-[44px]" href="/?page=budgets" data-page="budgets">View Budget / Cash Flow</a></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2">'+smallMetric('Income', money(cf.income))+smallMetric('Expenses', money(cf.ordinary_expenses))+smallMetric('Savings rate', cf.savings_rate==null?'—':pct(cf.savings_rate))+smallMetric('Budget remaining', money(bu.remaining_budget))+smallMetric('Projected result', money(cf.projected_month_end_result))+smallMetric('Investments', money(cf.investment_contributions))+smallMetric('Debt payments', money(cf.debt_payments))+smallMetric('Top category', cf.top_spending_category?esc(cf.top_spending_category.name):'—')+'</div></section>'+
+    '<section class="mb-4"><div class="flex items-center justify-between mb-2"><h2 class="section-title" style="margin:0;">Needs Attention</h2><a class="btn btn-sm min-h-[44px]" href="/?page=budgets&budgetTab=alerts" data-page="budgets">View all alerts</a></div>'+attention+'</section>'+
+    '<section class="mb-4"><h2 class="section-title">Quick Actions</h2><div class="grid grid-cols-2 md:grid-cols-4 gap-2">'+action('Add transaction','/?page=ledger','plus')+action('Review PennyWise','/?page=pennywise','message-square')+action('Add valuation','/?page=wealth','line-chart')+action('Add liability payment','/?page=liabilities','landmark')+action('Add goal contribution','/?page=goals','target')+action('Import statement','/?page=imports','upload')+action('Generate snapshot','/?page=networth','camera')+'</div></section>'+
+    '<section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">'+smallMetric('Wealth', money(we.current_investment_value), 'Gain/loss '+money(we.total_gain_loss)+' · XIRR '+(we.xirr==null?'—':pct(we.xirr)))+smallMetric('Liabilities', money(li.total_outstanding), 'Monthly EMI '+money(li.monthly_emi_commitment)+' · overdue '+money(li.overdue_amount))+smallMetric('Goals', fmt(go.active_goals||0)+' active', (go.goals_behind||0)+' behind · monthly '+money(go.monthly_contribution_required))+smallMetric('Budget', bu.used_percentage==null?'—':pct(bu.used_percentage/100), 'Remaining '+money(bu.remaining_budget)+' · alerts '+((bu.exceeded_categories||[]).length+(bu.approaching_limit_categories||[]).length))+'</section>'+
+    '<section class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4"><div><h2 class="section-title">Upcoming</h2>'+upcoming+'</div><div><h2 class="section-title">Recent Activity</h2>'+activity+'</div></section>'+
+    '<section class="mb-4"><h2 class="section-title">Data Health</h2><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">'+healthCards+'</div><div class="card p-3 mt-2 text-xs" style="color:var(--c-sub);">Imports unresolved: '+fmt(im.unresolved_rows||0)+' · PennyWise failed: '+fmt(pw.failed_sync_count||0)+' · Partial sections: '+(fo.meta&&fo.meta.partial?'yes':'no')+'</div></section>';
 }
 
 function ledgerRowHTML(t) {
