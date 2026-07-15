@@ -930,3 +930,9 @@ Phase 8 adds a consolidated Wealth Overview endpoint and a mobile-first overview
 ## Phase 9 note — manual retirement and investment valuations
 
 Phase 9 extends Personal Wealth from stock-focused holdings to manually tracked investments: mutual funds, EPF, NPS, PPF, SSY, fixed deposits, gold, bonds, crypto, cash equivalents, and other investments. The architecture now treats `wealth_valuation_snapshots` as the reusable manual/import/formula snapshot source and routes Dashboard, Net Worth, Wealth Overview, and monthly history through the shared Wealth valuation service. Valuation precedence is intentionally conservative to avoid double counting between asset-level snapshots and account-level aggregate snapshots. Formula valuation is estimate-only for fixed deposits and optional PPF/SSY metadata; user-entered snapshots remain authoritative when configured through manual or hybrid modes. No external NAV, EPFO, NPS CRA, CAMS/KFintech, tax, loan, deployment, or remote-migration behavior is introduced in this phase.
+
+## Phase 10 note: monthly net-worth history
+
+Phase 10 extends the existing `net_worth_snapshots` reporting table into the canonical monthly history store. A snapshot is keyed by `YYYY-MM`, dated to month end except the current month, and stores backend-calculated asset, investment, cash, other-asset, liability, and net-worth totals plus valuation health and JSON breakdowns. Snapshot generation reuses the shared Wealth valuation services for holdings, dated manual snapshots, formula assets, and hybrid fallbacks, so frontend pages render historical reporting without duplicating valuation formulas.
+
+Locked snapshots preserve historical totals and breakdowns until explicitly unlocked. Range backfill is controlled by preview and confirmation; unavailable historical data creates partial snapshots rather than fabricated numbers. Phase 10 does not add liability CRUD, tax calculations, external providers, or remote deployment behavior.
