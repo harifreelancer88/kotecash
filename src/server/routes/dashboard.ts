@@ -56,7 +56,7 @@ app.get("/dashboard", async (c: AppContext) => {
        SELECT t.user_id, t.next_run, t.amount, t.description, t.category_id, t.src_kind, t.src_id, t.dst_kind, t.dst_id, t.id
        FROM recurring_templates t
        WHERE t.user_id=? AND t.active=1 AND t.next_run <= date('now')
-         AND NOT EXISTS (SELECT 1 FROM movements m WHERE m.recurring_id=t.id AND m.date=t.next_run)`
+         AND NOT EXISTS (SELECT 1 FROM movements m WHERE COALESCE(m.status,'active')='active' AND m.recurring_id=t.id AND m.date=t.next_run)`
     ).bind(uid).run();
     const due = await c.env.DB.prepare(
       "SELECT id, next_run, frequency, day_of_month, month_of_year, weekday FROM recurring_templates WHERE user_id=? AND active=1 AND next_run <= date('now')"
@@ -80,7 +80,7 @@ app.get("/dashboard", async (c: AppContext) => {
     c.env.DB.prepare("SELECT id, total_utang, monthly_payment FROM cicilan WHERE user_id = ? AND status = 'active'")
       .bind(uid).all<{ id: number; total_utang: number; monthly_payment: number }>(),
     c.env.DB.prepare(
-      "SELECT src_kind, src_id, dst_kind, dst_id, amount, date, category_id FROM movements WHERE user_id = ?"
+      "SELECT src_kind, src_id, dst_kind, dst_id, amount, date, category_id FROM movements WHERE user_id = ? AND COALESCE(status,'active')='active'"
     ).bind(uid).all<Movement>(),
     c.env.DB.prepare("SELECT source_type, source_id, goal_id, amount FROM earmarks WHERE user_id = ?")
       .bind(uid).all<Earmark>(),
@@ -179,7 +179,7 @@ app.get("/dashboard/financial-overview", async (c: AppContext) => {
   const section = async <T>(name:string, fn:()=>Promise<T>, fallback:any=null) => { const r=await maybe(name,fn); if(r.error) errors[name]=r.error; return r.data ?? fallback; };
 
   const [legacy, cash, prevCash, budgetRows, budgetAlertsRows, cats, recur, wealthOv, liabSum, liabRows, goalsRows, nwSnapshots, importsRows, pennyRows, movements, investmentTx, valuationRows] = await Promise.all([
-    section('legacy_dashboard', async()=>{ const m = await c.env.DB.prepare('SELECT src_kind,src_id,dst_kind,dst_id,amount,date,category_id FROM movements WHERE user_id=?').bind(uid).all<Movement>(); return { mv:m.results }; }),
+    section('legacy_dashboard', async()=>{ const m = await c.env.DB.prepare("SELECT src_kind,src_id,dst_kind,dst_id,amount,date,category_id FROM movements WHERE user_id=? AND COALESCE(status,'active')='active'").bind(uid).all<Movement>(); return { mv:m.results }; }),
     section('cash_flow', ()=>monthlyCashFlow(c.env.DB, uid, month), {}),
     section('previous_cash_flow', ()=>monthlyCashFlow(c.env.DB, uid, addMonths(month,-1)), null),
     section('budgets', ()=>calculateBudgetRows(c.env.DB, uid, month), []),
@@ -193,7 +193,7 @@ app.get("/dashboard/financial-overview", async (c: AppContext) => {
     section('net_worth_snapshots', async()=> (await c.env.DB.prepare('SELECT * FROM net_worth_snapshots WHERE user_id=? ORDER BY month DESC LIMIT ?').bind(uid, Math.max(trendMonths,12)).all<any>()).results, []),
     section('imports', async()=> (await c.env.DB.prepare('SELECT * FROM financial_import_batches WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 20').bind(uid).all<any>()).results, []),
     section('pennywise', async()=> (await c.env.DB.prepare('SELECT * FROM pennywise_sync_records WHERE user_id=? ORDER BY updated_at DESC,id DESC LIMIT 50').bind(uid).all<any>()).results, []),
-    section('recent_movements', async()=> (await c.env.DB.prepare('SELECT m.*, c.name category_name FROM movements m LEFT JOIN categories c ON c.id=m.category_id AND c.user_id=m.user_id WHERE m.user_id=? ORDER BY date DESC,id DESC LIMIT 10').bind(uid).all<any>()).results, []),
+    section('recent_movements', async()=> (await c.env.DB.prepare("SELECT m.*, c.name category_name FROM movements m LEFT JOIN categories c ON c.id=m.category_id AND c.user_id=m.user_id WHERE m.user_id=? AND COALESCE(m.status,'active')='active' ORDER BY date DESC,id DESC LIMIT 10").bind(uid).all<any>()).results, []),
     section('recent_investments', async()=> (await c.env.DB.prepare('SELECT t.*, p.name account_name, a.name asset_name FROM investment_transactions t JOIN portfolios p ON p.id=t.account_id AND p.user_id=t.user_id LEFT JOIN investment_assets a ON a.id=t.asset_id AND a.user_id=t.user_id WHERE t.user_id=? ORDER BY trade_date DESC,t.id DESC LIMIT 10').bind(uid).all<any>()).results, []),
     section('valuations', async()=> (await c.env.DB.prepare('SELECT entity_kind, entity_id, as_of_date, value FROM balance_history WHERE user_id=? ORDER BY as_of_date DESC,id DESC LIMIT 10').bind(uid).all<any>()).results, []),
   ]);

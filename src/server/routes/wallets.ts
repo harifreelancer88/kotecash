@@ -22,7 +22,7 @@ app.get("/:id/reconciliation-status", async (c: AppContext) => {
     const id = Number(c.req.param("id"));
     const bal = await calculateBalance(c, uid, id, new Date().toISOString().slice(0, 10));
     const last = await c.env.DB.prepare("SELECT * FROM account_reconciliations WHERE user_id=? AND wallet_id=? AND status IN ('reconciled','small_difference','locked') ORDER BY date(period_end) DESC,id DESC LIMIT 1").bind(uid, id).first();
-    const cnt = await c.env.DB.prepare("SELECT COUNT(*) count FROM movements WHERE user_id=? AND ((src_kind='wallet' AND src_id=?) OR (dst_kind='wallet' AND dst_id=?)) AND date(date)>date(COALESCE((SELECT period_end FROM account_reconciliations WHERE user_id=? AND wallet_id=? AND status IN ('reconciled','locked') ORDER BY date(period_end) DESC LIMIT 1),'0001-01-01'))").bind(uid,id,id,uid,id).first<{ count: number }>();
+    const cnt = await c.env.DB.prepare("SELECT COUNT(*) count FROM movements WHERE user_id=? AND COALESCE(status,'active')='active' AND ((src_kind='wallet' AND src_id=?) OR (dst_kind='wallet' AND dst_id=?)) AND date(date)>date(COALESCE((SELECT period_end FROM account_reconciliations WHERE user_id=? AND wallet_id=? AND status IN ('reconciled','locked') ORDER BY date(period_end) DESC LIMIT 1),'0001-01-01'))").bind(uid,id,id,uid,id).first<{ count: number }>();
     return c.json({ ...bal, last_reconciled_period: last, unreconciled_transaction_count: cnt?.count || 0, stale_balance_status: bal.actual_snapshot_date ? "ok" : "missing", next_recommended_action: bal.reconciliation_status === "reconciled" ? "Monitor new transactions" : "Start reconciliation" });
   } catch (e: any) { return c.json({ error: e.message }, 400); }
 });
@@ -34,7 +34,7 @@ app.get("/", async (c: AppContext) => {
   ).bind(uid).all<{ id: number; initial_balance: number }>();
 
   const mvRes = await c.env.DB.prepare(
-    "SELECT src_kind, src_id, dst_kind, dst_id, amount, date, category_id FROM movements WHERE user_id = ?"
+    "SELECT src_kind, src_id, dst_kind, dst_id, amount, date, category_id FROM movements WHERE user_id = ? AND COALESCE(status,'active')='active'"
   ).bind(uid).all<Movement>();
 
   const out = [];
@@ -46,7 +46,7 @@ app.get("/", async (c: AppContext) => {
     const balance = accountBalance('wallet', w.id, w.initial_balance, mvRes.results);
     const earmarked = earmarks.results.reduce((s, e) => s + e.amount, 0);
     const activity = await c.env.DB.prepare(
-      `SELECT * FROM movements WHERE user_id=? AND ((src_kind='wallet' AND src_id=?) OR (dst_kind='wallet' AND dst_id=?))
+      `SELECT * FROM movements WHERE user_id=? AND COALESCE(status,'active')='active' AND ((src_kind='wallet' AND src_id=?) OR (dst_kind='wallet' AND dst_id=?))
        ORDER BY date DESC, id DESC LIMIT 8`
     ).bind(uid, w.id, w.id).all();
 
@@ -106,7 +106,7 @@ async function walletFreeFor(c: AppContext, uid: number, walletId: number): Prom
   ).bind(walletId, uid).first<{ initial_balance: number }>();
   if (!w) return 0;
   const mv = await c.env.DB.prepare(
-    "SELECT src_kind, src_id, dst_kind, dst_id, amount, date FROM movements WHERE user_id=?"
+    "SELECT src_kind, src_id, dst_kind, dst_id, amount, date FROM movements WHERE user_id=? AND COALESCE(status,'active')='active'"
   ).bind(uid).all<Movement>();
   const earmarks = await c.env.DB.prepare(
     "SELECT amount FROM earmarks WHERE user_id=? AND source_type='wallet' AND source_id=?"

@@ -683,6 +683,10 @@ Movement semantics:
 
 Optional query filters: `client_transaction_id`, `sms_fingerprint`, `from`, `to`, and `sync_status`. Use this after network timeouts to reconcile whether KoteCash already created a movement.
 
+`GET /api/integrations/pennywise/duplicate-candidates` returns read-only candidate groups for suspected historical Ledger duplicates. Filters: `date_from`, `date_to`, `wallet_id`, `confidence`, and `unresolved_only` (default true). Each candidate includes a deterministic `candidate_group_id`, involved movements, involved sync records, matching/differing evidence, confidence, reason, current Ledger impact, and recommended review action.
+
+`POST /api/integrations/pennywise/duplicate-candidates/review` records a reviewer decision. Actions are `keep_all`, `defer`, `ignore`, and `mark_duplicate`. `mark_duplicate` requires `confirm: true`, `retained_movement_id`, and `duplicate_movement_id`; it never deletes records. When allowed, the duplicate movement is soft-excluded with `status='duplicate_excluded'`, `duplicate_of_movement_id`, and audit metadata. Excluded movements are omitted from wallet balances, cash flow, budgets, Dashboard totals, active Ledger reads, and reconciliation calculations. Resolution is blocked with a dependency report when locked reconciliations, locked Net Worth snapshots, downstream links, wallet/material mismatches, or insufficient evidence make the action unsafe.
+
 ### Security and storage constraints
 
 Clients must send normalized fields, stable hashes, and masked account identifiers only. KoteCash rejects raw SMS body fields and stores no API tokens, secrets, or raw SMS text in `pennywise_sync_records`. Wallets and categories are ownership-validated for the authenticated user.

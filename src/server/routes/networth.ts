@@ -25,7 +25,7 @@ export async function reconstructMonth(db:D1Database, uid:number, month:string){
   const me=snapshotDate(month);
   const [wallets,mvRows,cicilan,depositRows,ccRows,wealth,phase11Liabilities] = await Promise.all([
     db.prepare("SELECT id, name, type, initial_balance FROM wallets WHERE user_id = ?").bind(uid).all<any>(),
-    db.prepare("SELECT src_kind, src_id, dst_kind, dst_id, amount, date FROM movements WHERE user_id = ? AND date<=?").bind(uid,me).all<Move>(),
+    db.prepare("SELECT src_kind, src_id, dst_kind, dst_id, amount, date FROM movements WHERE user_id = ? AND COALESCE(status,'active')='active' AND date<=?").bind(uid,me).all<Move>(),
     db.prepare("SELECT id, name, total_utang, start_date, status FROM cicilan WHERE user_id = ?").bind(uid).all<any>(),
     db.prepare("SELECT id, bank, amount, start_date, status FROM deposits WHERE user_id = ?").bind(uid).all<any>(),
     db.prepare("SELECT id, name, balance FROM credit_cards WHERE user_id = ?").bind(uid).all<any>(),

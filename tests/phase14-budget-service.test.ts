@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { movementBuckets, CASH_FLOW_DEFINITIONS } from '../src/server/budget-service';
+import { calculateBudgetRows, monthlyCashFlow, movementBuckets, CASH_FLOW_DEFINITIONS } from '../src/server/budget-service';
 
 describe('Phase 14 budget and cash-flow rules', () => {
   const categories = [
@@ -30,5 +30,22 @@ describe('Phase 14 budget and cash-flow rules', () => {
   });
   it('documents savings rate zero-income behavior as null in monthly API definitions', () => {
     expect(CASH_FLOW_DEFINITIONS.savingsRate).toContain('null when income is zero');
+  });
+  it('queries only active movements for budget and cash-flow totals', async () => {
+    const db = { prepare: (query: string) => ({
+      bind: (..._args: any[]) => ({
+        all: async () => {
+          if (query.includes('FROM categories')) return { results: [{ id: 2, type: 'expense', name: 'Transit' }] };
+          if (query.includes('FROM budgets')) return { results: [{ id: 1, category_id: 2, budget_amount: 100, amount: 100, effective_base_amount: 100, budget_type: 'monthly_category', status: 'active' }] };
+          if (query.includes('FROM movements')) {
+            expect(query).toContain("COALESCE(m.status,'active')='active'");
+            return { results: [{ amount: 18, src_kind: 'wallet', dst_kind: null, category_id: 2, date: '2026-07-15', status: 'active' }] };
+          }
+          return { results: [] };
+        },
+      }),
+    }) } as any;
+    expect((await monthlyCashFlow(db, 1, '2026-07')).total_expenses).toBe(18);
+    expect((await calculateBudgetRows(db, 1, '2026-07'))[0].actual_spending).toBe(18);
   });
 });

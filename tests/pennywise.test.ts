@@ -120,4 +120,79 @@ describe("PennyWise integration routes", () => {
     const sql = (mock as any).prepare.mock.calls.map((c: any) => c[0]).join("\n");
     expect(sql).toContain("client_transaction_id=?");
   });
+
+  function duplicateDb(opts: { locked?: boolean; linked?: boolean; alreadyExcluded?: boolean } = {}) {
+    const rows = [
+      { movement_id: 10, transaction_date: "2026-07-15", transaction_time: null, amount: 18, description: "Bmtc | UPI:619636992949 | PennyWise", src_kind: "wallet", src_id: 1, dst_kind: null, dst_id: null, movement_status: "active", movement_created_at: "2026-07-15 10:00:00", duplicate_of_movement_id: null, wallet_name: "ICICI", sync_record_id: 100, client_id: "phone", client_transaction_id: "a", sms_fingerprint: null, raw_sms_hash: null, sync_status: "created", source: "sms", financial_fingerprint: "f1", reference_number: "619636992949", merchant: "Bmtc", sync_created_at: "2026-07-15 10:00:00", sync_updated_at: "2026-07-15 10:00:00" },
+      { movement_id: 11, transaction_date: "2026-07-15", transaction_time: null, amount: 18, description: "Bmtc | UPI:619636992949 | PennyWise", src_kind: "wallet", src_id: 1, dst_kind: null, dst_id: null, movement_status: opts.alreadyExcluded ? "duplicate_excluded" : "active", movement_created_at: "2026-07-15 10:01:00", duplicate_of_movement_id: opts.alreadyExcluded ? 10 : null, wallet_name: "ICICI", sync_record_id: 101, client_id: "phone", client_transaction_id: "b", sms_fingerprint: null, raw_sms_hash: null, sync_status: "created", source: "sms", financial_fingerprint: "f2", reference_number: "619636992949", merchant: "Bmtc", sync_created_at: "2026-07-15 10:01:00", sync_updated_at: "2026-07-15 10:01:00" },
+    ];
+    const prepare = vi.fn((query: string) => ({
+      bind: vi.fn((...args: any[]) => ({
+        all: vi.fn(async () => {
+          if (query.includes("JOIN pennywise_sync_records")) return { results: rows.filter(r => r.movement_status === "active") };
+          if (query.includes("pennywise_duplicate_reviews") && query.includes("SELECT")) return { results: [] };
+          if (query.includes("account_reconciliation_rows")) return { results: opts.locked ? [{ id: 1, status: "locked", locked: 1 }] : [] };
+          if (query.includes("net_worth_snapshots")) return { results: [] };
+          if (query.includes("liability_payments") || query.includes("goal_contributions") || query.includes("income_occurrence_allocations") || query.includes("investment_transactions") || query.includes("movement_allocations") || query.includes("financial_import_rows")) return { results: opts.linked ? [{ id: 99 }] : [] };
+          return { results: [] };
+        }),
+        first: vi.fn(async () => {
+          if (query.includes("SELECT * FROM movements")) return rows.find(r => r.movement_id === Number(args[1])) ? { id: Number(args[1]), user_id: 1, date: "2026-07-15", amount: 18, src_kind: "wallet", src_id: 1, dst_kind: null, dst_id: null, status: opts.alreadyExcluded && Number(args[1]) === 11 ? "duplicate_excluded" : "active", duplicate_of_movement_id: opts.alreadyExcluded && Number(args[1]) === 11 ? 10 : null } : null;
+          if (query.includes("SELECT status,duplicate_of_movement_id")) return opts.alreadyExcluded ? { status: "duplicate_excluded", duplicate_of_movement_id: 10 } : { status: "active", duplicate_of_movement_id: null };
+          return null;
+        }),
+        run: vi.fn(async () => ({ success: true, meta: { changes: 1, last_row_id: 88 } })),
+      })),
+    }));
+    return { prepare } as unknown as D1Database;
+  }
+
+  it("returns read-only duplicate candidates with movement and sync evidence", async () => {
+    const mock = duplicateDb(); const { app, env } = appWith(mock);
+    const res = await app.request("/api/integrations/pennywise/duplicate-candidates?date_from=2026-07-15&date_to=2026-07-15", {}, env);
+    expect(res.status).toBe(200);
+    const body = await res.json<any>();
+    expect(body.candidates).toHaveLength(1);
+    expect(body.candidates[0]).toMatchObject({ confidence: "high", recommended_review_action: "mark_duplicate" });
+    expect(body.candidates[0].involved_movements.map((m: any) => m.movement_id)).toEqual([10, 11]);
+    expect(body.candidates[0].involved_sync_records.map((r: any) => r.sync_record_id)).toEqual([100, 101]);
+  });
+
+  it("soft-excludes a confirmed duplicate without hard deletion", async () => {
+    const mock = duplicateDb(); const { app, env } = appWith(mock);
+    const candidates = await (await app.request("/api/integrations/pennywise/duplicate-candidates", {}, env)).json<any>();
+    const group = candidates.candidates[0].candidate_group_id;
+    const res = await post(app, env, "/duplicate-candidates/review", { candidate_group_id: group, action: "mark_duplicate", retained_movement_id: 10, duplicate_movement_id: 11, confirm: true });
+    expect(res.status).toBe(200);
+    const sql = (mock as any).prepare.mock.calls.map((c: any) => c[0]).join("\n");
+    expect(sql).toMatch(/UPDATE movements SET status='duplicate_excluded'/);
+    expect(sql).not.toMatch(/DELETE FROM movements|DELETE FROM pennywise_sync_records/);
+    expect(sql).toMatch(/pennywise_duplicate_audit_events/);
+  });
+
+  it("blocks duplicate resolution when a locked reconciliation depends on the movement", async () => {
+    const mock = duplicateDb({ locked: true }); const { app, env } = appWith(mock);
+    const candidates = await (await app.request("/api/integrations/pennywise/duplicate-candidates", {}, env)).json<any>();
+    const res = await post(app, env, "/duplicate-candidates/review", { candidate_group_id: candidates.candidates[0].candidate_group_id, action: "mark_duplicate", retained_movement_id: 10, duplicate_movement_id: 11, confirm: true });
+    expect(res.status).toBe(409);
+    const body = await res.json<any>();
+    expect(body.dependency_report.blocks[0].type).toBe("locked_reconciliation");
+  });
+
+  it("is idempotent when the duplicate was already excluded", async () => {
+    const mock = duplicateDb({ alreadyExcluded: true }); const { app, env } = appWith(mock);
+    const res = await post(app, env, "/duplicate-candidates/review", { candidate_group_id: "pwdup:any", action: "mark_duplicate", retained_movement_id: 10, duplicate_movement_id: 11, confirm: true });
+    expect(res.status).toBe(200);
+    const body = await res.json<any>();
+    expect(body.idempotent).toBe(true);
+  });
+
+  it("records Keep all without excluding either movement", async () => {
+    const mock = duplicateDb(); const { app, env } = appWith(mock);
+    const candidates = await (await app.request("/api/integrations/pennywise/duplicate-candidates", {}, env)).json<any>();
+    const res = await post(app, env, "/duplicate-candidates/review", { candidate_group_id: candidates.candidates[0].candidate_group_id, action: "keep_all" });
+    expect(res.status).toBe(200);
+    const sql = (mock as any).prepare.mock.calls.map((c: any) => c[0]).join("\n");
+    expect(sql).not.toMatch(/UPDATE movements SET status='duplicate_excluded'/);
+  });
 });
