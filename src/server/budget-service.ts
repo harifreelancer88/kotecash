@@ -10,7 +10,7 @@ export const CASH_FLOW_DEFINITIONS = {
   debtPayments: 'Wallet-to-cicilan, wallet-to-credit-card, or debt_payment classified movements; shown separately and deduplicated from ordinary expenses.',
   investmentContributions: 'Cash moving to portfolios or investment-classified categories; shown separately from consumption expenses.',
   savingsAmount: 'income − ordinary expenses − debt payments.',
-  savingsRate: 'savings amount / income; null when income is zero.',
+  savingsRate: 'savings amount / clean income; null when income is zero (clean income is zero). Reimbursements, refunds, loan proceeds, internal transfers, and investment redemptions are excluded.',
 };
 
 function finite(n: any, fallback = 0) { const v = Number(n); return Number.isFinite(v) ? v : fallback; }
@@ -18,7 +18,8 @@ function ym(d: Date) { return d.toISOString().slice(0,7); }
 function endOfMonth(month: string) { const [y,m]=month.split('-').map(Number); return new Date(Date.UTC(y,m,0)).toISOString().slice(0,10); }
 function daysInMonth(month: string) { return Number(endOfMonth(month).slice(8,10)); }
 function elapsed(month: string) { const today = new Date(); if (ym(today) !== month) return daysInMonth(month); return Math.max(1, today.getUTCDate()); }
-function classify(c: any) { return c?.classification || (c?.type === 'income' ? 'income' : c?.is_debt_service ? 'debt_payment' : 'variable'); }
+function classify(c: any) { return c?.classification || (c?.type === 'income' ? 'earned_income' : c?.is_debt_service ? 'debt_payment' : 'variable'); }
+function excludedIncome(m:any, cls:string){ const text=String((m.description||'')+' '+(m.category_name||'')).toLowerCase(); return ['reimbursement','refund','loan_proceeds','transfer'].includes(cls) || /refund|reversal|cashback|reimburse|loan proceeds|pinjaman|internal transfer|redemption/.test(text); }
 function isTransfer(m:any){ return OWNED.has(m.src_kind) && OWNED.has(m.dst_kind); }
 function isIncome(m:any){ return m.src_kind == null && OWNED.has(m.dst_kind); }
 function isExpense(m:any){ return OWNED.has(m.src_kind) && m.dst_kind == null; }
@@ -29,7 +30,7 @@ export async function getCategories(db:D1Database, userId:number){
   return res.results || [];
 }
 export async function getMovements(db:D1Database,userId:number,from:string,to:string){
-  const res = await db.prepare(`SELECT * FROM movements WHERE user_id=? AND date BETWEEN ? AND ? ORDER BY date,id`).bind(userId,from,to).all<any>();
+  const res = await db.prepare(`SELECT m.*, c.name category_name FROM movements m LEFT JOIN categories c ON c.id=m.category_id AND c.user_id=m.user_id WHERE m.user_id=? AND m.date BETWEEN ? AND ? ORDER BY m.date,m.id`).bind(userId,from,to).all<any>();
   return res.results || [];
 }
 export async function getBudgets(db:D1Database,userId:number,month?:string,status?:string){
@@ -39,7 +40,7 @@ export async function getBudgets(db:D1Database,userId:number,month?:string,statu
 }
 export function movementBuckets(movements:any[], categories:any[]){
   const cats=new Map(categories.map((c:any)=>[c.id,c])); let income=0, ordinaryExpenses=0, fixedExpenses=0, variableExpenses=0, discretionaryExpenses=0, debtPayments=0, investmentContributions=0, recurringExpenses=0, oneTimeExpenses=0, refunds=0, transfers=0;
-  for(const m of movements){ const cls=classify(cats.get(m.category_id)); const amt=finite(m.amount); if(isTransfer(m)){ transfers+=amt; if(m.dst_kind==='portfolio') investmentContributions+=amt; if(m.dst_kind==='cicilan'||m.dst_kind==='credit_card') debtPayments+=amt; continue; } if(isIncome(m)){ if(/refund|reversal|cashback/i.test(m.description||'')){ refunds+=amt; ordinaryExpenses-=amt; } else income+=amt; continue; } if(isExpense(m)){ if(cls==='investment'){ investmentContributions+=amt; continue; } if(cls==='debt_payment'){ debtPayments+=amt; continue; } ordinaryExpenses+=amt; if(cls==='fixed'||m.recurring_id) fixedExpenses+=amt; else if(cls==='discretionary') discretionaryExpenses+=amt; else variableExpenses+=amt; if(m.recurring_id) recurringExpenses+=amt; else oneTimeExpenses+=amt; }}
+  for(const m of movements){ const cls=classify(cats.get(m.category_id)); const amt=finite(m.amount); if(isTransfer(m)){ transfers+=amt; if(m.dst_kind==='portfolio') investmentContributions+=amt; if(m.dst_kind==='cicilan'||m.dst_kind==='credit_card') debtPayments+=amt; continue; } if(isIncome(m)){ if(excludedIncome(m, cls)){ if(/refund|reversal|cashback/i.test(m.description||'')){ refunds+=amt; ordinaryExpenses-=amt; } continue; } income+=amt; continue; } if(isExpense(m)){ if(cls==='investment'){ investmentContributions+=amt; continue; } if(cls==='debt_payment'){ debtPayments+=amt; continue; } ordinaryExpenses+=amt; if(cls==='fixed'||m.recurring_id) fixedExpenses+=amt; else if(cls==='discretionary') discretionaryExpenses+=amt; else variableExpenses+=amt; if(m.recurring_id) recurringExpenses+=amt; else oneTimeExpenses+=amt; }}
   return {income, ordinaryExpenses, fixedExpenses, variableExpenses, discretionaryExpenses, debtPayments, investmentContributions, recurringExpenses, oneTimeExpenses, refunds, transfers};
 }
 export async function calculateBudgetRows(db:D1Database,userId:number,month:string){

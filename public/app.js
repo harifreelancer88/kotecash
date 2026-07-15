@@ -12,7 +12,7 @@ var M = {
   cicilan: [], txns: [], networth: [], goals: [], earmarks: [],
   budgets: [], budgetSummary: [], cashFlow: {}, cashFlowCategories: [], cashFlowAlerts: [], recurringCandidates: [], expenseCats: [], incomeCats: [],
   recurring: [], liabilities: [], liabilitySummary: {},
-  dashboard: {}, financialOverview: null,
+  dashboard: {}, financialOverview: null, incomeSources: [], incomeSummary: {}, incomeForecast: {}, expectedCalendar: {},
 };
 
 // name/id resolution maps
@@ -80,11 +80,11 @@ async function loadAll() {
     api("/api/categories"), api("/api/wallets"), api("/api/credit-cards"),
     api("/api/deposits"), api("/api/portfolios"), api("/api/cicilan"),
     api("/api/goals"), api("/api/budgets"), api("/api/transactions"),
-    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"), api("/api/liabilities"), api("/api/liabilities/summary"), api("/api/budgets/summary"), api("/api/cash-flow/monthly"), api("/api/cash-flow/categories"), api("/api/cash-flow/alerts"), api("/api/cash-flow/recurring-candidates"), api("/api/dashboard/financial-overview"),
+    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"), api("/api/liabilities"), api("/api/liabilities/summary"), api("/api/budgets/summary"), api("/api/cash-flow/monthly"), api("/api/cash-flow/categories"), api("/api/cash-flow/alerts"), api("/api/cash-flow/recurring-candidates"), api("/api/dashboard/financial-overview"), api("/api/income-sources"), api("/api/income/summary"), api("/api/income/forecast"), api("/api/cash-flow/expected-calendar"),
   ]);
   var cats = data[0], wallets = data[1], ccs = data[2], deps = data[3],
     ports = data[4], cics = data[5], goals = data[6], buds = data[7],
-    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {}, liabilities = data[13] || {}, liabilitySummary = data[14] || {}, budgetSummary = data[15] || [], cashFlow = data[16] || {}, cashFlowCategories = data[17] || [], cashFlowAlerts = data[18] || [], recurringCandidates = data[19] || [], financialOverview = data[20] || null;
+    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {}, liabilities = data[13] || {}, liabilitySummary = data[14] || {}, budgetSummary = data[15] || [], cashFlow = data[16] || {}, cashFlowCategories = data[17] || [], cashFlowAlerts = data[18] || [], recurringCandidates = data[19] || [], financialOverview = data[20] || null, incomeSources = data[21] || [], incomeSummary = data[22] || {}, incomeForecast = data[23] || {}, expectedCalendar = data[24] || {};
 
   cats.forEach(function (c) { CATMAP[c.name] = c.id; });
   M.expenseCats = cats.filter(function (c) { return c.type === "expense"; }).map(function (c) { return c.name; });
@@ -141,7 +141,7 @@ async function loadAll() {
   });
 
   M.income = dash.income; M.expense = dash.expense; M.net = dash.sisa;
-  M.savingsRate = cashFlow.savings_rate ?? dash.savingsRate; M.dti = dash.dti; M.dashboard = dash || {}; M.financialOverview = financialOverview; M.budgetSummary = budgetSummary; M.cashFlow = cashFlow; M.cashFlowCategories = cashFlowCategories; M.cashFlowAlerts = cashFlowAlerts; M.recurringCandidates = recurringCandidates;
+  M.savingsRate = cashFlow.savings_rate ?? dash.savingsRate; M.dti = dash.dti; M.dashboard = dash || {}; M.financialOverview = financialOverview; M.incomeSources = incomeSources; M.incomeSummary = incomeSummary; M.incomeForecast = incomeForecast; M.expectedCalendar = expectedCalendar; M.budgetSummary = budgetSummary; M.cashFlow = cashFlow; M.cashFlowCategories = cashFlowCategories; M.cashFlowAlerts = cashFlowAlerts; M.recurringCandidates = recurringCandidates;
 
   M.networth = ((nws.snapshots && nws.snapshots.length) ? nws.snapshots.slice().reverse() : (nw.snapshots || [])).map(function (s) {
     var br = s.breakdown || {};
@@ -238,6 +238,7 @@ function renderPage(id) {
     case "stats": return renderStats();
     case "categories": return renderCategories();
     case "budgets": return renderBudgets();
+    case "income": return renderIncome();
     case "cicilan": return renderCicilan();
     case "liabilities": return renderLiabilities();
     case "recurring": return renderRecurring();
@@ -328,6 +329,21 @@ async function toast(msg, isErr) {
    PAGE RENDERERS (ported from mockup)
    ================================================================= */
 
+
+function renderIncome() {
+  var s = M.incomeSummary || {}, f = M.incomeForecast || {}, sources = M.incomeSources || [], cal = (M.expectedCalendar && M.expectedCalendar.items) || [];
+  function money(v){ return v == null ? '—' : 'Rp' + fmt(v); }
+  function card(label,value,extra){ return '<div class="card p-4"><div class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">'+label+'</div><div class="text-xl font-bold mono" style="color:var(--c-primary);">'+value+'</div>'+(extra?'<div class="text-xs mt-1" style="color:var(--c-sub);">'+extra+'</div>':'')+'</div>'; }
+  var srcRows = sources.map(function(x){ return '<div class="card-row"><div class="min-w-0"><div class="font-semibold truncate">'+esc(x.name)+'</div><div class="text-xs" style="color:var(--c-sub);">'+esc(x.income_type)+' · '+esc(x.frequency)+' · '+(x.active?'active':'archived')+'</div></div><div class="mono text-sm">'+money(x.expected_net_credit||x.expected_amount||x.base_estimate)+'</div></div>'; }).join('') || '<div class="card p-4 text-sm" style="color:var(--c-sub);">No income sources yet. Add one through the Income API.</div>';
+  var calRows = cal.map(function(x){ return '<div class="card-row"><div><b>'+esc(x.title)+'</b><div class="text-xs" style="color:var(--c-sub);">'+esc(x.date)+' · '+esc(x.status)+' · '+esc(x.confidence)+'</div></div><div class="mono text-sm text-[#4A8C6F]">+'+money(x.amount)+'</div></div>'; }).join('') || '<div class="card p-4 text-sm" style="color:var(--c-sub);">No expected credits in the selected horizon.</div>';
+  return '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Income</h1><p class="page-subtitle">Expected versus actual income, salary tracking, reconciliation, forecasts, and trends.</p>'+ 
+    '<div class="flex gap-2 overflow-x-auto pb-2 mb-3"><span class="btn btn-sm">Overview</span><span class="btn btn-sm">Sources</span><span class="btn btn-sm">Expected</span><span class="btn btn-sm">Received</span><span class="btn btn-sm">Reconciliation</span><span class="btn btn-sm">Forecast</span><span class="btn btn-sm">Trends</span></div>'+ 
+    '<section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">'+card('Actual income',money(s.actual_income))+card('Expected income',money(s.expected_income))+card('Variance',money(s.income_variance))+card('Next expected credit',s.next_expected_credit?esc(s.next_expected_credit.expected_date):'—')+card('Expected salary',money(s.expected_salary))+card('Overdue expected',money(s.overdue_expected_income))+card('Projected month end',money(s.projected_month_end_income))+card('Sources',fmt(s.income_source_count||0))+'</section>'+ 
+    '<section class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4"><div><h2 class="section-title">Income by source</h2>'+srcRows+'</div><div><h2 class="section-title">Upcoming credits</h2>'+calRows+'</div></section>'+ 
+    '<section class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">'+card('Conservative forecast',money(f.scenario==='conservative'?f.expected_income:s.expected_income))+card('Base forecast',money(s.expected_income))+card('Optimistic forecast',money(f.scenario==='optimistic'?f.expected_income:s.expected_income))+'</section>'+ 
+    '<section class="card p-4 text-sm" style="color:var(--c-sub);">Backend-only calculations classify reimbursements, refunds, loan proceeds, transfers, and investment redemptions out of ordinary income. Matching links existing Ledger credits and never creates duplicate movements.</section>';
+}
+
 function renderDashboard() {
   var fo = M.financialOverview;
   if (!fo) return '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Home</h1><div class="card p-4">Dashboard data is loading.</div>';
@@ -345,6 +361,7 @@ function renderDashboard() {
   return '<h1 class="text-2xl font-bold" style="color:var(--c-primary);">Home</h1><p class="page-subtitle">Unified financial command center</p>'+
     '<section class="card p-4 mb-4" aria-labelledby="dashHero"><div class="flex items-start justify-between gap-3"><div><h2 id="dashHero" class="text-[10px] uppercase tracking-wide" style="color:var(--c-sub);">Net Worth</h2><div class="text-2xl font-bold mono" style="color:var(--c-primary);">'+money(nw.current_live_net_worth)+'</div><div class="text-xs mt-1" style="color:var(--c-sub);">Live value · latest snapshot '+esc(nw.latest_snapshot_month||'unavailable')+' · '+esc(nw.valuation_status||'unknown')+'</div></div><a class="btn btn-sm min-h-[44px]" href="/?page=networth" data-page="networth">View Net Worth</a></div><div class="flex items-end gap-2 mt-3" role="img" aria-label="Compact net-worth trend">'+(bars||'<span class="text-xs" style="color:var(--c-sub);">No snapshot trend yet</span>')+'</div><div class="grid grid-cols-2 gap-2 mt-3">'+smallMetric('Monthly change', money(nw.month_on_month_change), nw.month_on_month_percentage==null?'No comparison':pct(nw.month_on_month_percentage/100))+smallMetric('YTD change', money(nw.year_to_date_change), nw.year_to_date_percentage==null?'No comparison':pct(nw.year_to_date_percentage/100))+'</div></section>'+
     '<section class="mb-4"><div class="flex items-center justify-between mb-2"><h2 class="section-title" style="margin:0;">This Month</h2><a class="btn btn-sm min-h-[44px]" href="/?page=budgets" data-page="budgets">View Budget / Cash Flow</a></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2">'+smallMetric('Income', money(cf.income))+smallMetric('Expenses', money(cf.ordinary_expenses))+smallMetric('Savings rate', cf.savings_rate==null?'—':pct(cf.savings_rate))+smallMetric('Budget remaining', money(bu.remaining_budget))+smallMetric('Projected result', money(cf.projected_month_end_result))+smallMetric('Investments', money(cf.investment_contributions))+smallMetric('Debt payments', money(cf.debt_payments))+smallMetric('Top category', cf.top_spending_category?esc(cf.top_spending_category.name):'—')+'</div></section>'+
+    '<section class="mb-4"><div class="flex items-center justify-between mb-2"><h2 class="section-title" style="margin:0;">Income</h2><a class="btn btn-sm min-h-[44px]" href="/?page=income" data-page="income">Open Income</a></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2">'+smallMetric('Actual income', money((M.incomeSummary||{}).actual_income))+smallMetric('Expected income', money((M.incomeSummary||{}).expected_income))+smallMetric('Variance', money((M.incomeSummary||{}).income_variance))+smallMetric('Next credit', ((M.incomeSummary||{}).next_expected_credit||{}).expected_date||'—')+'</div></section>'+
     '<section class="mb-4"><div class="flex items-center justify-between mb-2"><h2 class="section-title" style="margin:0;">Needs Attention</h2><a class="btn btn-sm min-h-[44px]" href="/?page=budgets&budgetTab=alerts" data-page="budgets">View all alerts</a></div>'+attention+'</section>'+
     '<section class="mb-4"><h2 class="section-title">Quick Actions</h2><div class="grid grid-cols-2 md:grid-cols-4 gap-2">'+action('Add transaction','/?page=ledger','plus')+action('Review PennyWise','/?page=pennywise','message-square')+action('Add valuation','/?page=wealth','line-chart')+action('Add liability payment','/?page=liabilities','landmark')+action('Add goal contribution','/?page=goals','target')+action('Import statement','/?page=imports','upload')+action('Generate snapshot','/?page=networth','camera')+'</div></section>'+
     '<section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">'+smallMetric('Wealth', money(we.current_investment_value), 'Gain/loss '+money(we.total_gain_loss)+' · XIRR '+(we.xirr==null?'—':pct(we.xirr)))+smallMetric('Liabilities', money(li.total_outstanding), 'Monthly EMI '+money(li.monthly_emi_commitment)+' · overdue '+money(li.overdue_amount))+smallMetric('Goals', fmt(go.active_goals||0)+' active', (go.goals_behind||0)+' behind · monthly '+money(go.monthly_contribution_required))+smallMetric('Budget', bu.used_percentage==null?'—':pct(bu.used_percentage/100), 'Remaining '+money(bu.remaining_budget)+' · alerts '+((bu.exceeded_categories||[]).length+(bu.approaching_limit_categories||[]).length))+'</section>'+

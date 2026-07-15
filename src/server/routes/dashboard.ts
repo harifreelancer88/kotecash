@@ -5,6 +5,7 @@ import { alerts as budgetAlerts, calculateBudgetRows, categoryAnalytics, monthly
 import { getWealthAggregation } from "../wealth/valuation";
 import { liabilityTotals, dueStatus } from "../wealth/liabilities";
 import { calculateGoalProgress } from "../wealth/goals";
+import { summary as incomeSummary, endOfMonth as incomeEndOfMonth } from "../income-service";
 import {
   savingsRate,
   dtiRatio,
@@ -124,6 +125,7 @@ app.get("/dashboard", async (c: AppContext) => {
     for (const g of goals) { const p = await calculateGoalProgress(c.env.DB, uid, g, asOf); priority.push({ id:g.id, name:g.name, priority:g.priority, target_date:g.target_date, progress_percent:p.progress_percent, remaining_amount:p.remaining_amount, status:p.status }); if(g.priority==='high' && ['behind','slightly_behind'].includes(p.status)) highPriorityWarning = true; }
     goalsSummary = { top_priority_goals: priority, next_target_date: priority.map((g:any)=>g.target_date).filter(Boolean).sort()[0] || null, high_priority_warning: highPriorityWarning };
   } catch { goalsSummary = null; }
+  const incomePlanning = await incomeSummary(c.env.DB, uid, `${month}-01`, incomeEndOfMonth(month)).catch(()=>null);
 
   return c.json({
     period: month,
@@ -160,6 +162,7 @@ app.get("/dashboard", async (c: AppContext) => {
     dti,
     dtiTier: await dtiTier(dti),
     goalsSummary,
+    incomePlanning,
   });
 });
 

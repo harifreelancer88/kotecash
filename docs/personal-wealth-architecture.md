@@ -964,3 +964,9 @@ The new `GET /api/dashboard/financial-overview` endpoint distinguishes live curr
 ## Phase 17 note — Account balance reconciliation
 
 Wallet trust is improved through explicit opening-balance snapshots, dated account balance snapshots, backend as-of balance calculation, and statement-period reconciliation sessions. Wallet values used by Net Worth should come from the shared as-of balance service so historical snapshots use only snapshots and movements available on or before the selected date, avoiding future snapshot leakage and double-counting. Credit-card-style wallet reconciliation is treated as statement confirmation only; outstanding debt remains in liabilities unless the user explicitly updates liability balances through existing liability workflows.
+
+## Phase 20 note — Income planning and salary tracking
+
+Phase 20 adds an Income module that models configured income sources and expected occurrences separately from the universal Ledger. Actual income, balances, and Net Worth continue to be derived only from Ledger movements. Expected salary, freelance, business, rental, pension, benefit, interest, dividend, reimbursement, refund, bonus, and other income are used for planning, upcoming-credit views, reconciliation, and forecast scenarios without creating duplicate Ledger records.
+
+Income occurrence matching links expected items to existing Ledger credits through explicit allocations. This supports split receipts and combined salary/bonus credits while preserving imported, PennyWise, or manually entered movement provenance. Clean-income definitions exclude reimbursements, refunds, loan proceeds, internal transfers, and investment redemptions from earned-income and savings-rate analytics. Dashboard and Budget integrations surface compact expected-versus-actual metrics while keeping forecasts separate from actual cash flow.
