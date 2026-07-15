@@ -206,6 +206,7 @@ function navigate(id, push) {
   if (id === "pennywise" && !M._pennywiseLoaded) loadPennyWiseSummary();
   if (id === "wealth" && window.WealthRouter) window.WealthRouter.load();
   if (id === "imports") setTimeout(loadImportsPage,0);
+  if (id === "reconcile") setTimeout(loadReconcilePage,0);
   // update sidebar/mobile active
   document.querySelectorAll("[data-page]").forEach(function (el) {
     el.classList.toggle("active", el.getAttribute("data-page") === id);
@@ -251,6 +252,7 @@ function renderPage(id) {
     case "pennywise": return renderPennyWise();
     case "wealth": return window.renderWealthApp ? window.renderWealthApp() : "<p>Loading wealth…</p>";
     case "imports": return renderImports();
+    case "reconcile": return renderReconcile();
     case "wealth-import": return window.renderWealthImport ? window.renderWealthImport() : "<p>Loading wealth import…</p>";
     default: return "<p>Page not found.</p>";
   }
@@ -1190,3 +1192,26 @@ async function boot() {
   navigate(pageFromUrl(), false);
 }
 document.addEventListener("DOMContentLoaded", boot);
+
+function renderReconcile(){
+  setTimeout(loadReconcilePage,0);
+  return '<div class="space-y-4 reconcile-page">'+
+    '<div><h1 class="text-2xl font-bold">Reconcile</h1><p class="text-sm text-[var(--c-sub)]">Account balance snapshots, statement-period matching, discrepancies, and reconciliation history.</p></div>'+
+    '<div class="flex gap-2 overflow-x-auto no-scrollbar"><button class="btn" onclick="reconcileTab(\'overview\')">Overview</button><button class="btn" onclick="reconcileTab(\'start\')">Start Reconciliation</button><button class="btn" onclick="reconcileTab(\'progress\')">In Progress</button><button class="btn" onclick="reconcileTab(\'history\')">History</button><button class="btn" onclick="reconcileTab(\'snapshots\')">Balance Snapshots</button></div>'+
+    '<div id="reconcileContent" class="space-y-3"><p class="text-sm text-[var(--c-sub)]">Loading…</p></div></div>';
+}
+var _recon={tab:'overview',data:null};
+async function loadReconcilePage(){ if(currentPage!=='reconcile')return; try{ var rs=await api('/api/account-reconciliations'); var ss=await api('/api/account-balances/snapshots'); _recon.data={reconciliations:rs.reconciliations||[],snapshots:ss.snapshots||[]}; reconcileTab(_recon.tab||'overview'); }catch(e){ toast(e.message,true); } }
+function reconcileTab(t){ _recon.tab=t; var el=document.getElementById('reconcileContent'); if(!el)return; var d=_recon.data||{reconciliations:[],snapshots:[]};
+ if(t==='overview'){ var active=d.reconciliations.filter(function(r){return !r.locked&&r.status!=='cancelled'}); el.innerHTML='<div class="grid grid-cols-2 md:grid-cols-5 gap-2">'+['Reconciled accounts','Unreconciled accounts','Total discrepancy','Stale balances','Unmatched transactions'].map(function(x,i){return '<div class="card p-3"><div class="text-xs text-[var(--c-sub)]">'+x+'</div><div class="text-xl font-bold">'+(i===0?d.reconciliations.filter(function(r){return r.status==='reconciled'||r.status==='locked'}).length:i===2?fmtMoney(d.reconciliations.reduce(function(s,r){return s+(r.difference||0)},0)):active.length)+'</div></div>';}).join('')+'</div>'+walletStatusCards(); }
+ else if(t==='start'){ el.innerHTML='<div class="card p-4 space-y-3 max-w-xl"><h2 class="font-bold">Start Reconciliation</h2>'+fld('recWallet','Wallet',sel((M.wallets||[]).map(function(w){return '<option value="'+w.id+'">'+esc(w.name)+'</option>';}).join('')))+ '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">'+fld('recStart','Period start',inp('date'))+fld('recEnd','Period end',inp('date'))+'</div><div class="grid grid-cols-1 sm:grid-cols-2 gap-3">'+fld('recOpen','Opening balance',inp('number'))+fld('recClose','Statement closing',inp('number'))+'</div>'+fld('recNotes','Notes',inp('text'))+'<button class="btn btn-primary w-full" onclick="createRecon()">Preview Reconciliation</button><p class="text-xs text-[var(--c-sub)]">Flow: select wallet, period, balances, optional import batch, preview, auto-match, resolve, reconcile, then lock.</p></div>'; }
+ else if(t==='progress'){ el.innerHTML=renderReconList(d.reconciliations.filter(function(r){return !r.locked&&r.status!=='cancelled'})); }
+ else if(t==='history'){ el.innerHTML=renderReconList(d.reconciliations); }
+ else { el.innerHTML='<div class="card overflow-hidden"><div class="p-3 font-bold">Balance Snapshots</div>'+(d.snapshots.map(function(s){return '<div class="p-3 border-t border-[var(--c-border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"><div><b>'+esc(s.wallet_name||s.wallet_id)+'</b><div class="text-xs text-[var(--c-sub)]">'+s.snapshot_date+' • '+s.source+' • '+(s.statement_period_start||'')+' '+(s.statement_period_end||'')+'</div></div><div class="font-mono">'+fmtMoney(s.balance)+'</div></div>';}).join('')||'<p class="p-3 text-sm text-[var(--c-sub)]">No snapshots yet.</p>')+'</div>'; }
+}
+function walletStatusCards(){ return '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">'+(M.wallets||[]).map(function(w){return '<div class="card p-3"><div class="flex justify-between gap-3"><div><b>'+esc(w.name)+'</b><div class="text-xs text-[var(--c-sub)]">calculated balance</div></div><div class="font-mono">'+fmtMoney(w.balance||0)+'</div></div><a class="btn mt-3 inline-flex" href="/?page=reconcile">Reconcile</a></div>';}).join('')+'</div>'; }
+function renderReconList(rows){ return '<div class="space-y-2">'+(rows.map(function(r){return '<div class="card p-3"><div class="flex flex-col sm:flex-row sm:justify-between gap-2"><div><b>'+esc(r.wallet_name||r.wallet_id)+'</b><div class="text-xs text-[var(--c-sub)]">'+r.period_start+' → '+r.period_end+' • '+r.status+(r.locked?' • locked':'')+'</div></div><div class="font-mono">Diff '+fmtMoney(r.difference||0)+'</div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mt-3"><div>Opening<br><b>'+fmtMoney(r.opening_balance||0)+'</b></div><div>Statement<br><b>'+fmtMoney(r.statement_closing_balance||0)+'</b></div><div>Calculated<br><b>'+fmtMoney(r.expected_closing_balance||0)+'</b></div><div>Matched<br><b>'+(r.matched_count||0)+'</b></div></div><div class="mt-3 flex gap-2 flex-wrap"><button class="btn" onclick="previewRecon('+r.id+')">Preview</button><button class="btn" onclick="autoMatchRecon('+r.id+')">Auto-match</button><button class="btn" onclick="lockRecon('+r.id+')">Lock</button></div></div>';}).join('')||'<p class="text-sm text-[var(--c-sub)]">No reconciliations.</p>')+'</div>'; }
+async function createRecon(){ try{ var body={wallet_id:Number(val('recWallet')),period_start:val('recStart'),period_end:val('recEnd'),opening_balance:Number(val('recOpen')),statement_closing_balance:Number(val('recClose')),notes:val('recNotes')}; await api('/api/account-reconciliations',{method:'POST',body:body}); toast('Reconciliation started'); await loadReconcilePage(); reconcileTab('progress'); }catch(e){toast(e.message,true);} }
+async function previewRecon(id){ try{ var p=await api('/api/account-reconciliations/'+id+'/preview',{method:'POST'}); openModal('Reconciliation preview','<pre class="text-xs overflow-auto">'+esc(JSON.stringify(p,null,2))+'</pre>'); }catch(e){toast(e.message,true);} }
+async function autoMatchRecon(id){ try{ var r=await api('/api/account-reconciliations/'+id+'/auto-match',{method:'POST'}); toast('Matched '+r.matched+' rows'); await loadReconcilePage(); }catch(e){toast(e.message,true);} }
+async function lockRecon(id){ if(!confirm('Lock this reconciliation? Unlock is required before recalculation.'))return; try{ await api('/api/account-reconciliations/'+id+'/lock',{method:'POST'}); toast('Locked'); await loadReconcilePage(); }catch(e){toast(e.message,true);} }

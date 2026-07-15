@@ -732,3 +732,79 @@ CSV, UTF-8 CSV, BOM-prefixed CSV, CRLF/LF, quoted commas, multiline quoted cells
 - Partial failure behavior: independent sections are loaded in parallel where safe. If a non-critical section fails, the endpoint returns the remaining sections plus `section_errors.<section>` and `meta.partial: true`; it does not log financial payloads.
 - Freshness rules: dashboard data health surfaces stale or missing valuations, unresolved imports, PennyWise sync failures, and unavailable snapshot comparisons through attention items and health indicators rather than raw internal timestamps.
 - Navigation structure remains compact: Home/Dashboard links to full modules instead of duplicating full tables. Mobile primary navigation should keep Home, Ledger, Wealth, and More-style access to Budget, Liabilities, Goals, Net Worth, Imports, PennyWise, and Settings according to the current app conventions.
+
+---
+
+## Phase 17 — Account balance reconciliation APIs
+
+KoteCash now supports explicit wallet opening balances, dated account balance snapshots, as-of balance calculation, and account reconciliation sessions. These APIs are backend-calculated; clients must not derive financial totals on the frontend.
+
+### Account balance snapshots
+
+`account_balance_snapshots` stores one user-scoped wallet snapshot per wallet/date/source. Fields include `wallet_id`, `snapshot_date`, `balance`, optional available/ledger balances, `currency`, `source`, optional statement period, optional `import_batch_id`, external reference, notes, and `is_reconciled`.
+
+Supported `source` values: `manual`, `statement`, `import`, `opening_balance`, `migration`, and `reconciliation_adjustment`.
+
+Endpoints:
+
+- `GET /api/account-balances/snapshots?wallet_id=` lists snapshots.
+- `POST /api/account-balances/snapshots` creates a snapshot. Future dates and non-finite amounts are rejected. Snapshot creation never creates Ledger movements.
+- `PUT /api/account-balances/snapshots/:id` explicitly corrects a snapshot.
+- `DELETE /api/account-balances/snapshots/:id` deletes only the snapshot, never movements.
+
+Opening balances are represented as `source:"opening_balance"` snapshots. They are not income, not expenses, and are excluded from cash-flow and budget analytics because no ordinary Ledger movement is created.
+
+### As-of wallet balance
+
+`GET /api/wallets/:id/balance-as-of?as_of=YYYY-MM-DD` returns the shared backend wallet balance calculation:
+
+`expected_balance = opening_balance + credits − debits + incoming_transfers − outgoing_transfers ± reconciliation_adjustments`.
+
+The response includes totals, latest actual snapshot, reconciliation difference/status, valuation source details, and warnings such as missing opening balance or transactions before the opening date. Future movements are excluded by the `as_of` cutoff. Internal transfers are not income or expenses but do affect wallet balance.
+
+### Account reconciliations
+
+`account_reconciliations` stores a wallet statement-period session with period dates, opening balance, expected closing, statement closing, difference, status, source, optional import batch, lock timestamps, notes, and historical counts. Supported statuses: `draft`, `in_review`, `reconciled`, `small_difference`, `unreconciled`, `locked`, and `cancelled`.
+
+`account_reconciliation_rows` stores row decisions and links back to existing Ledger movements and Phase 15 `financial_import_rows` where available. Row types include Ledger movement, imported statement row, balance adjustment, opening balance, unmatched statement row, and unmatched Ledger row. Match statuses are exact/probable/possible/unmatched/excluded/resolved, and resolutions include matching existing movements, importing as new later, skipping statement rows, marking Ledger rows valid, marking duplicates, creating adjustment rows, or unresolved.
+
+Endpoints:
+
+- `GET /api/account-reconciliations`
+- `POST /api/account-reconciliations`
+- `GET /api/account-reconciliations/:id`
+- `PUT /api/account-reconciliations/:id`
+- `DELETE /api/account-reconciliations/:id` cancels when unlocked and never deletes movements.
+- `POST /api/account-reconciliations/:id/preview`
+- `POST /api/account-reconciliations/:id/auto-match`
+- `POST /api/account-reconciliations/:id/rows/:row_id/resolve`
+- `POST /api/account-reconciliations/:id/reconcile`
+- `POST /api/account-reconciliations/:id/lock`
+- `POST /api/account-reconciliations/:id/unlock`
+- `POST /api/account-reconciliations/:id/cancel`
+- `POST /api/account-reconciliations/:id/adjustment-preview`
+- `POST /api/account-reconciliations/:id/adjustment-commit`
+- `GET /api/account-reconciliations/history`
+- `GET /api/wallets/:id/reconciliation-status`
+
+### Matching confidence and duplicates
+
+Auto-match compares statement import rows with existing manual, PennyWise-created, and imported Ledger movements by wallet, amount, date window, direction, and references. Exact/high matches may be suggested. Lower confidence rows remain unresolved for review. A Ledger movement is only auto-linked once in a session unless a future split-transaction workflow explicitly supports one-to-many matching. Duplicate statuses are preserved from statement import rows and can be resolved without automatic deletion.
+
+### Lifecycle, locking, and adjustments
+
+Reconciliation preview calculates statement-period credits/debits/transfers and compares expected closing to statement closing. INR tolerance defaults to ₹1 for exact reconciliation and a small-difference band for minor residuals. Required missing balances prevent a clean reconciled status.
+
+Locking preserves opening, closing, calculated totals, difference, matched row decisions, resolutions, adjustment rows, and final status. Locked sessions do not silently recalculate; unlock before changing row decisions or recalculating. Locking does not block unrelated future transactions.
+
+Adjustments require preview and explicit confirmation. They are stored as reconciliation adjustment rows and clearly labeled; no automatic transaction deletion or hidden balancing entry is created.
+
+### Integrations and limitations
+
+Phase 15 statement import batches can seed reconciliations via `import_batch_id`; imported rows are reused rather than duplicated. Rollback deletes only import-created balance snapshots and updates reconciliation row links safely. Locked reconciliations block unsafe rollback and return dependency details.
+
+PennyWise-created movements are matched like normal Ledger movements while preserving movement provenance. Reconciliation must not duplicate PennyWise movements.
+
+Budget and cash-flow reports remain based on ordinary Ledger movements: opening balances are snapshots, transfers are excluded from income/expense, and adjustment classification is explicit. Net Worth should use the as-of balance service for wallet values and must not count both calculated balances and snapshots twice. If credit cards are also liabilities, outstanding debt remains liability-side; card wallet reconciliation confirms purchases/payments but does not inflate assets or update liabilities without explicit user confirmation.
+
+Known limitations: no direct bank APIs, browser scraping, automatic statement downloads, automatic transaction deletion, tax calculation, or full reconciliation report export.

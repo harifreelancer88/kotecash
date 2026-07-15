@@ -960,3 +960,7 @@ Phase 15 adds a reviewed statement-import layer beside the existing Wealth CSV i
 Phase 16 adds a mobile-first Dashboard as the financial command center while keeping the existing module boundaries intact. The Dashboard reads from Ledger movements, Budget and cash-flow services, Wealth overview/performance, liabilities, goals, Net Worth snapshots, imports, and PennyWise sync records. It does not create financial records during load and does not introduce new advisory, tax, or external-data behavior.
 
 The new `GET /api/dashboard/financial-overview` endpoint distinguishes live current net worth from stored Net Worth snapshots and returns compact module summaries, ranked attention items, upcoming dated items, recent navigation activity, deterministic health indicators, section-level partial errors, and data freshness-oriented sync/import status.
+
+## Phase 17 note — Account balance reconciliation
+
+Wallet trust is improved through explicit opening-balance snapshots, dated account balance snapshots, backend as-of balance calculation, and statement-period reconciliation sessions. Wallet values used by Net Worth should come from the shared as-of balance service so historical snapshots use only snapshots and movements available on or before the selected date, avoiding future snapshot leakage and double-counting. Credit-card-style wallet reconciliation is treated as statement confirmation only; outstanding debt remains in liabilities unless the user explicitly updates liability balances through existing liability workflows.

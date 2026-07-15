@@ -35,6 +35,8 @@ import goalContributions from "./routes/goal-contributions";
 import pennywise from "./routes/pennywise";
 import imports from "./routes/imports";
 import importTemplates from "./routes/import-templates";
+import accountBalances from "./routes/account-balances";
+import accountReconciliations from "./routes/account-reconciliations";
 
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 
@@ -163,6 +165,8 @@ app.route("/api/earmarks", earmarks);
 app.route("/api/integrations/pennywise", pennywise);
 app.route("/api/imports", imports);
 app.route("/api/import-templates", importTemplates);
+app.route("/api/account-balances", accountBalances);
+app.route("/api/account-reconciliations", accountReconciliations);
 
 export { app };
 export default app;
