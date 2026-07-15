@@ -442,3 +442,33 @@ Fixed-deposit formulas support principal, annual interest rate, start date, matu
 Default stale valuation thresholds are: stocks and mutual funds with prices 7 days, EPF 120 days, NPS 45 days, PPF 120 days, SSY 120 days, formula fixed deposits not stale while metadata is valid, manual fixed deposits 120 days, gold 30 days, and other manual assets 90 days. `WEALTH_MANUAL_VALUATION_STALE_DAYS` can override the global fallback default.
 
 No automatic external integrations are provided for mutual-fund NAV, CAMS/KFintech, EPFO, NPS CRA, or market providers in this phase. Investment contributions, dividends, interest, and maturities do not automatically create Ledger movements; optional `movement_id` remains a reconciliation link only. Snapshot-only assets may show absolute gain but XIRR remains unavailable unless real dated cash flows and a terminal value exist.
+
+## Phase 10 monthly net-worth snapshots
+
+KoteCash now supports backend-generated monthly net-worth snapshots for historical reporting. Snapshots are reporting artifacts only; they do not create `movements`, Ledger expenses, Wealth transactions, or provider calls.
+
+### Snapshot model
+
+`net_worth_snapshots` keeps one user-scoped row per canonical `YYYY-MM` month. Phase 10 stores month/date aliases (`snapshot_month`, `snapshot_date`), backend totals (`assets_total`, `investments_total`, `cash_total`, `other_assets_total`, `liabilities_total`, `net_worth`), valuation health (`valuation_complete`, `valuation_status`, `priced_assets`, `missing_assets`, `stale_assets`), source/lock fields, a content hash, and `breakdown_json` for historical chart/table rendering.
+
+### Generation endpoints
+
+- `GET /api/net-worth/snapshots?date_from=&date_to=&year=&latest=&locked=` lists saved monthly snapshots and backend trend analytics.
+- `GET /api/net-worth/snapshots/:month` returns one saved snapshot.
+- `POST /api/net-worth/snapshots/generate` with `{ "month":"YYYY-MM", "force_recalculate":false }` creates or returns one month.
+- `POST /api/net-worth/snapshots/preview-range` with `{ "start_month":"YYYY-MM", "end_month":"YYYY-MM" }` previews a controlled backfill.
+- `POST /api/net-worth/snapshots/generate-range` with `{ "start_month":"YYYY-MM", "end_month":"YYYY-MM", "only_missing":true }` creates a confirmed range.
+- `POST /api/net-worth/snapshots/:month/lock` locks a snapshot.
+- `POST /api/net-worth/snapshots/:month/unlock` unlocks a snapshot.
+- `DELETE /api/net-worth/snapshots/:month` deletes only an unlocked snapshot.
+
+### Rules and limitations
+
+- Future months are rejected.
+- Snapshot date defaults to month end; the current month uses today's date until month end.
+- Generation is idempotent. Existing unlocked rows are preserved unless recalculation is requested; locked rows are skipped and never silently replaced.
+- Historical values use existing dated movements, historical Wealth transactions/prices, dated manual valuation snapshots, and formula valuations as of the snapshot date.
+- Missing historical prices or valuations produce partial snapshots with readable health details rather than fabricated values.
+- Current values are not reused for past months except legacy/manual valuation fallbacks already exposed by the shared Wealth valuation service.
+- No general liability CRUD exists yet; liabilities are limited to existing credit-card and cicilan-derived values until Phase 11.
+- Optional Cloudflare cron can call the generation endpoint for the previous completed month, but cron is not required; manual generation/backfill is available now.

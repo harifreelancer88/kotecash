@@ -80,11 +80,11 @@ async function loadAll() {
     api("/api/categories"), api("/api/wallets"), api("/api/credit-cards"),
     api("/api/deposits"), api("/api/portfolios"), api("/api/cicilan"),
     api("/api/goals"), api("/api/budgets"), api("/api/transactions"),
-    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"),
+    api("/api/dashboard"), api("/api/net-worth"), api("/api/recurring"), api("/api/net-worth/snapshots"),
   ]);
   var cats = data[0], wallets = data[1], ccs = data[2], deps = data[3],
     ports = data[4], cics = data[5], goals = data[6], buds = data[7],
-    txns = data[8], dash = data[9], nw = data[10], recur = data[11];
+    txns = data[8], dash = data[9], nw = data[10], recur = data[11], nws = data[12] || {};
 
   cats.forEach(function (c) { CATMAP[c.name] = c.id; });
   M.expenseCats = cats.filter(function (c) { return c.type === "expense"; }).map(function (c) { return c.name; });
@@ -143,9 +143,11 @@ async function loadAll() {
   M.income = dash.income; M.expense = dash.expense; M.net = dash.sisa;
   M.savingsRate = dash.savingsRate; M.dti = dash.dti; M.dashboard = dash || {};
 
-  M.networth = (nw.snapshots || []).map(function (s) {
-    return { month: s.month, assets: s.assets, liabilities: s.liabilities, netWorth: s.netWorth, assetBreakdown: s.assetBreakdown || {}, liabilityBreakdown: s.liabilityBreakdown || {}, valuation_complete: s.valuation_complete, warnings: s.warnings || [] };
+  M.networth = ((nws.snapshots && nws.snapshots.length) ? nws.snapshots.slice().reverse() : (nw.snapshots || [])).map(function (s) {
+    var br = s.breakdown || {};
+    return { id: s.id, month: s.month || s.snapshot_month, snapshot_date: s.snapshot_date, assets: s.assets_total ?? s.assets, liabilities: s.liabilities_total ?? s.liabilities, netWorth: s.net_worth ?? s.netWorth, investments_total: s.investments_total ?? br.assets?.investments, cash_total: s.cash_total, other_assets_total: s.other_assets_total, assetBreakdown: s.assetBreakdown || br.assets || {}, liabilityBreakdown: s.liabilityBreakdown || br.liabilities || {}, valuation_complete: s.valuation_complete, valuation_status: s.valuation_status, locked: s.locked, warnings: s.warnings || br.health?.warnings || [] };
   });
+  M.networthAnalytics = nws.analytics || {};
 
   M.recurring = (recur || []).map(function (r) {
     return {
@@ -674,26 +676,42 @@ async function deleteRecurring(id) {
 
 /* ── NET WORTH ── */
 function renderNetWorth() {
-  var last = M.networth[M.networth.length - 1] || { assets: 0, liabilities: 0, assetBreakdown: {}, liabilityBreakdown: {}, warnings: [] };
-  var prev = M.networth[M.networth.length - 2] || last;
-  var nw = last.netWorth ?? (last.assets - last.liabilities);
-  var delta = nw - (prev.netWorth ?? (prev.assets - prev.liabilities));
-  var netColor = nw >= 0 ? "text-[#4A8C6F]" : "text-[#C44B4B]";
+  var rowsData = M.networth || [];
+  var last = rowsData[rowsData.length - 1] || { assets: 0, liabilities: 0, netWorth: 0, assetBreakdown: {}, liabilityBreakdown: {}, warnings: [] };
+  var a = M.networthAnalytics || {};
+  var nw = a.current_net_worth ?? last.netWorth ?? (last.assets - last.liabilities);
+  var mom = a.month_on_month_change;
+  var ytd = a.year_to_date_change;
   var warn = last.valuation_complete === false || (last.warnings || []).length;
-  var breakdown = last.assetBreakdown || {};
-  var rows = Object.keys(breakdown).map(function (k) { return '<tr><td class="p-2">' + esc(k.replace(/_/g, " ")) + '</td><td class="p-2 text-right mono">Rp' + fmt(breakdown[k]) + '</td></tr>'; }).join("");
-  var lrows = Object.keys(last.liabilityBreakdown || {}).map(function (k) { return '<tr><td class="p-2">' + esc(k.replace(/_/g, " ")) + '</td><td class="p-2 text-right mono">Rp' + fmt(last.liabilityBreakdown[k]) + '</td></tr>'; }).join("");
-  return '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Net Worth</h1><p class="page-subtitle">Track your assets, liabilities, and wealth over time</p>' +
-    (warn ? '<div class="card p-3 mb-4 text-xs" style="color:var(--c-warning);background:rgba(212,162,78,.10);">Valuation incomplete: ' + esc((last.warnings || []).slice(0,3).join(", ")) + '</div>' : '') +
-    '<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">' +
-      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Assets</div><div class="text-xl font-bold mono" style="color: var(--c-success);">Rp' + fmt(last.assets) + '</div></div>' +
-      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Liabilities</div><div class="text-xl font-bold mono" style="color: var(--c-danger);">Rp' + fmt(last.liabilities) + '</div></div>' +
-      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Investments</div><div class="text-xl font-bold mono" style="color: var(--c-primary);">Rp' + fmt(last.wealthInvestmentValue || breakdown.stocks + breakdown.mutual_funds + breakdown.etfs + breakdown.retirement + breakdown.fixed_income + breakdown.manual_portfolios + breakdown.other_investments) + '</div></div>' +
-      '<div class="card p-5"><div class="text-xs uppercase mb-1" style="color: var(--c-sub);">Net Worth</div><div class="text-xl font-bold mono ' + netColor + '">' + (nw < 0 ? "−" : "") + 'Rp' + fmt(Math.abs(nw)) + ' <span class="text-sm">' + (delta >= 0 ? "+" : "") + fmt(delta) + '</span></div></div>' +
+  function moneyCell(v){ return '<span class="mono">Rp' + fmt(v || 0) + '</span>'; }
+  var snapRows = rowsData.slice().reverse().map(function(r,idx){
+    var prev = rowsData[rowsData.length - idx - 2];
+    var change = prev ? (r.netWorth - prev.netWorth) : null;
+    return '<tr class="border-b" style="border-color:rgba(53,88,114,.06)"><td class="p-2">' + esc(r.month) + '</td><td class="p-2">' + esc(r.snapshot_date || '') + '</td><td class="p-2 text-right">' + moneyCell(r.assets) + '</td><td class="p-2 text-right">' + moneyCell(r.investments_total || 0) + '</td><td class="p-2 text-right">' + moneyCell(r.liabilities) + '</td><td class="p-2 text-right font-semibold">' + moneyCell(r.netWorth) + '</td><td class="p-2 text-right mono">' + (change == null ? '—' : (change >= 0 ? '+' : '−') + 'Rp' + fmt(Math.abs(change))) + '</td><td class="p-2">' + esc(r.valuation_status || (r.valuation_complete === false ? 'partial' : 'complete')) + '</td><td class="p-2">' + (r.locked ? '🔒 Locked' : 'Unlocked') + '</td><td class="p-2 whitespace-nowrap"><button class="text-xs" onclick="generateSnapshot(\'' + esc(r.month) + '\',true)">Recalc</button> · <button class="text-xs" onclick="toggleSnapshotLock(\'' + esc(r.month) + '\',' + (!r.locked) + ')">' + (r.locked ? 'Unlock' : 'Lock') + '</button>' + (!r.locked ? ' · <button class="text-xs" onclick="deleteSnapshot(\'' + esc(r.month) + '\')">Delete</button>' : '') + '</td></tr>';
+  }).join('');
+  var br = last.assetBreakdown || {};
+  var invCats = br.investment_categories || br;
+  var catRows = Object.keys(invCats).map(function(k){ return '<tr><td class="p-2">' + esc(k.replace(/_/g,' ')) + '</td><td class="p-2 text-right">' + moneyCell(invCats[k]) + '</td></tr>'; }).join('');
+  return '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Net Worth</h1><p class="page-subtitle">Monthly snapshots, trends, valuation health, and month-end reporting.</p>' +
+    (warn ? '<div class="card p-3 mb-4 text-xs" style="color:var(--c-warning);background:rgba(212,162,78,.10);">Partial valuation: historical values depend on available dated transactions, prices, and manual valuations. Liabilities remain limited until Phase 11. ' + esc((last.warnings || []).slice(0,2).join(', ')) + '</div>' : '') +
+    '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">' +
+      '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Current net worth</div><div class="font-bold mono">Rp' + fmt(nw) + '</div></div>' +
+      '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Monthly change</div><div class="font-bold mono">' + (mom == null ? '—' : (mom >= 0 ? '+' : '−') + 'Rp' + fmt(Math.abs(mom))) + '</div></div>' +
+      '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">YTD change</div><div class="font-bold mono">' + (ytd == null ? '—' : (ytd >= 0 ? '+' : '−') + 'Rp' + fmt(Math.abs(ytd))) + '</div></div>' +
+      '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Valuation status</div><div class="font-bold">' + esc(last.valuation_status || 'live') + '</div></div>' +
+      '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Total assets</div><div class="font-bold mono">Rp' + fmt(last.assets) + '</div></div>' +
+      '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Investments</div><div class="font-bold mono">Rp' + fmt(last.investments_total || 0) + '</div></div>' +
+      '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Liabilities</div><div class="font-bold mono">Rp' + fmt(last.liabilities) + '</div></div>' +
+      '<div class="card p-4"><div class="text-[10px] uppercase" style="color:var(--c-sub)">Latest snapshot</div><div class="font-bold">' + esc(last.month || 'none') + (last.locked ? ' 🔒' : '') + '</div></div>' +
     '</div>' +
-    '<div class="grid grid-cols-1 lg:grid-cols-3 gap-4"><div class="card p-5 lg:col-span-2"><div class="section-title">Trend</div><div style="height:280px"><canvas id="chartNetWorth"></canvas></div></div>' +
-    '<div class="card p-5"><div class="section-title">Breakdown</div><table class="w-full text-sm"><tbody>' + rows + lrows + '</tbody></table></div></div>';
+    '<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4"><div class="card p-5 lg:col-span-2"><div class="section-title">Net-worth trend</div><div style="height:280px"><canvas id="chartNetWorth"></canvas></div></div><div class="card p-5"><div class="section-title">Investment category breakdown</div><table class="w-full text-sm"><tbody>' + catRows + '</tbody></table></div></div>' +
+    '<div class="card p-4 mb-4"><div class="section-title">Snapshot controls</div><div class="flex flex-wrap gap-2"><input id="snapshotMonth" type="month" class="input input-sm" value="' + today().slice(0,7) + '"><button class="btn btn-sm" onclick="generateSnapshot(document.getElementById(\'snapshotMonth\').value,false)">Generate</button><button class="btn btn-sm" onclick="generateSnapshot(document.getElementById(\'snapshotMonth\').value,true)">Recalculate</button><button class="btn btn-sm" onclick="previewBackfill()">Preview backfill</button></div><div id="backfillPreview" class="text-xs mt-2" style="color:var(--c-sub)">Current month uses today until month end; future months are rejected.</div></div>' +
+    '<div class="card p-5"><div class="section-title">Monthly snapshot history</div><div style="overflow-x:auto"><table class="w-full text-xs" style="min-width:920px"><thead><tr><th class="p-2 text-left">Month</th><th class="p-2 text-left">Date</th><th class="p-2 text-right">Assets</th><th class="p-2 text-right">Investments</th><th class="p-2 text-right">Liabilities</th><th class="p-2 text-right">Net worth</th><th class="p-2 text-right">Change</th><th class="p-2 text-left">Status</th><th class="p-2 text-left">Lock</th><th class="p-2 text-left">Actions</th></tr></thead><tbody>' + (snapRows || '<tr><td class="p-3" colspan="10">No snapshots yet. Generate a month to begin history.</td></tr>') + '</tbody></table></div></div>';
 }
+async function generateSnapshot(month, force){ if(!month)return toast('Pick a month',true); if(force && !confirm('Recalculate this unlocked snapshot from current historical data? Locked snapshots are preserved.')) return; try{ await api('/api/net-worth/snapshots/generate',{method:'POST',body:{month:month,force_recalculate:!!force}}); await reload('networth'); toast('Snapshot ready'); }catch(e){ toast(e.message,true); } }
+async function toggleSnapshotLock(month, lock){ if(!confirm((lock?'Lock':'Unlock') + ' snapshot ' + month + '?')) return; try{ await api('/api/net-worth/snapshots/' + month + '/' + (lock?'lock':'unlock'),{method:'POST'}); await reload('networth'); }catch(e){ toast(e.message,true); } }
+async function deleteSnapshot(month){ if(!confirm('Delete unlocked snapshot ' + month + '?')) return; try{ await api('/api/net-worth/snapshots/' + month,{method:'DELETE'}); await reload('networth'); }catch(e){ toast(e.message,true); } }
+async function previewBackfill(){ var end=today().slice(0,7), start=end.slice(0,5)+'01'; try{ var r=await api('/api/net-worth/snapshots/preview-range',{method:'POST',body:{start_month:start,end_month:end}}); document.getElementById('backfillPreview').textContent = r.months.map(function(m){return m.month + (m.locked?' locked':m.already_present?' present':' create');}).join(' · '); }catch(e){ toast(e.message,true); } }
 function initNetWorthChart() {
   var ctx = document.getElementById("chartNetWorth");
   if (!ctx || !window.Chart) return;
