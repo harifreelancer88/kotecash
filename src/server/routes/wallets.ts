@@ -1,8 +1,31 @@
 import { Hono } from "hono";
 import type { AppContext, Bindings, Variables } from "../types";
 import { accountBalance, type Movement, type Earmark } from "../formulas";
+import { calculateBalance } from "../account-balance-service";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+app.get("/:id/balance-as-of", async (c: AppContext) => {
+  try {
+    const uid = c.get("userId");
+    const id = Number(c.req.param("id"));
+    const asOf = c.req.query("as_of") || new Date().toISOString().slice(0, 10);
+    return c.json(await calculateBalance(c, uid, id, asOf));
+  } catch (e: any) {
+    return c.json({ error: e.message }, e.message === "Wallet not found" ? 404 : 400);
+  }
+});
+
+app.get("/:id/reconciliation-status", async (c: AppContext) => {
+  try {
+    const uid = c.get("userId");
+    const id = Number(c.req.param("id"));
+    const bal = await calculateBalance(c, uid, id, new Date().toISOString().slice(0, 10));
+    const last = await c.env.DB.prepare("SELECT * FROM account_reconciliations WHERE user_id=? AND wallet_id=? AND status IN ('reconciled','small_difference','locked') ORDER BY date(period_end) DESC,id DESC LIMIT 1").bind(uid, id).first();
+    const cnt = await c.env.DB.prepare("SELECT COUNT(*) count FROM movements WHERE user_id=? AND ((src_kind='wallet' AND src_id=?) OR (dst_kind='wallet' AND dst_id=?)) AND date(date)>date(COALESCE((SELECT period_end FROM account_reconciliations WHERE user_id=? AND wallet_id=? AND status IN ('reconciled','locked') ORDER BY date(period_end) DESC LIMIT 1),'0001-01-01'))").bind(uid,id,id,uid,id).first<{ count: number }>();
+    return c.json({ ...bal, last_reconciled_period: last, unreconciled_transaction_count: cnt?.count || 0, stale_balance_status: bal.actual_snapshot_date ? "ok" : "missing", next_recommended_action: bal.reconciliation_status === "reconciled" ? "Monitor new transactions" : "Start reconciliation" });
+  } catch (e: any) { return c.json({ error: e.message }, 400); }
+});
 
 app.get("/", async (c: AppContext) => {
   const uid = c.get("userId");
