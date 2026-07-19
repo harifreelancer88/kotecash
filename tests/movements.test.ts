@@ -2,20 +2,21 @@ import { describe, it, expect, vi } from 'vitest';
 import movementsApp from '../src/server/routes/movements';
 import { Hono } from 'hono';
 
-function mockDB(opts: { failRun?: boolean; missingMovement?: boolean; missingCategory?: boolean; missingWallet?: boolean } = {}) {
+function mockDB(opts: { failRun?: boolean; failBatch?: boolean; missingMovement?: boolean; missingCategory?: boolean; missingWallet?: boolean; existingRule?: boolean } = {}) {
   const prepare = vi.fn((query: string) => ({
     bind: vi.fn((...binds: any[]) => ({
       all: vi.fn(async () => ({ results: query.includes('FROM movements') ? [{ id: 1, amount: 100 }] : [] })),
       first: vi.fn(async () => {
+        if (query.includes('FROM merchant_categorization_rules')) return opts.existingRule ? { id: 44 } : null;
         if (query.includes('FROM movements')) return opts.missingMovement ? null : { id: binds[0] };
-        if (query.includes('FROM categories')) return opts.missingCategory ? null : { id: binds[1] };
+        if (query.includes('FROM categories')) return opts.missingCategory ? null : { id: binds[1], type: 'expense' };
         if (query.includes('FROM wallets')) return opts.missingWallet ? null : { id: binds[1] };
         return null;
       }),
       run: vi.fn(async () => { if (opts.failRun) throw new Error('D1_ERROR: bad SQL'); return { success: true, meta: { last_row_id: 1 } }; }),
     })),
   }));
-  return { prepare, batch: vi.fn(async (stmts: any[]) => stmts.map(() => ({ success: true }))) } as unknown as D1Database;
+  return { prepare, batch: vi.fn(async (stmts: any[]) => { if (opts.failBatch || opts.failRun) throw new Error('D1_ERROR: batch failed'); return stmts.map((_: any, i: number) => ({ success: true, meta: { last_row_id: i + 1, changes: i === stmts.length - 1 ? 6 : 1 } })); }) } as unknown as D1Database;
 }
 
 function harness(db: D1Database) {
@@ -36,7 +37,7 @@ describe('movements route', () => {
   it('PUT edits movement fields without inserting or touching sync/status metadata', async () => {
     const db = mockDB(); const { app, env } = harness(db);
     const res = await req(app, env, '/5', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    expect(res.status).toBe(200); expect(await res.json()).toEqual({ success: true, id: 5 });
+    expect(res.status).toBe(200); expect(await res.json()).toMatchObject({ success: true, id: 5, transaction_saved: true, existing_updated: 0 });
     const sql = (db as any).prepare.mock.calls.map((c: any) => c[0]).join('\n');
     expect(sql).toMatch(/UPDATE movements SET date=\?, amount=\?, description=\?, category_id=\?, src_kind=\?, src_id=\?, dst_kind=\?, dst_id=\?, updated_at=datetime\('now'\)/);
     expect(sql).not.toMatch(/INSERT INTO movements/);
@@ -57,6 +58,51 @@ describe('movements route', () => {
     const inserts = (db as any).prepare.mock.calls.filter((c: any) => c[0].includes('INSERT INTO movements')).length;
     expect(inserts).toBe(1);
   });
+
+  it('POST supports independent merchant rule and bulk update flags', async () => {
+    const db = mockDB(); const { app, env } = harness(db);
+    const res = await req(app, env, '', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, description: 'P Murugeshan | UPI', apply_merchant_rule: true, update_existing_merchant: true }) });
+    expect(res.status).toBe(201);
+    const json: any = await res.json();
+    expect(json).toMatchObject({ transaction_saved: true, existing_updated: 6 });
+    const sql = (db as any).prepare.mock.calls.map((c: any) => c[0]).join('\n');
+    expect(sql).toMatch(/INSERT INTO merchant_categorization_rules|UPDATE merchant_categorization_rules/);
+    expect(sql).toMatch(/UPDATE movements SET category_id=\?/);
+  });
+
+
+  it('uses one DB.batch for both checkbox writes so movement, rule, and history are atomic', async () => {
+    const db = mockDB(); const { app, env } = harness(db);
+    const res = await req(app, env, '', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, description: 'P Murugeshan | UPI', apply_merchant_rule: true, update_existing_merchant: true }) });
+    expect(res.status).toBe(201);
+    expect((db as any).batch).toHaveBeenCalledTimes(1);
+    expect((db as any).batch.mock.calls[0][0]).toHaveLength(3);
+  });
+
+  it('returns JSON error and no success body when an atomic write batch fails', async () => {
+    const db = mockDB({ failBatch: true }); const { app, env } = harness(db);
+    const res = await req(app, env, '', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, description: 'P Murugeshan | UPI', apply_merchant_rule: true, update_existing_merchant: true }) });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Unable to create movement' });
+    expect((db as any).batch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps rule-only and bulk-only operations inside atomic batches', async () => {
+    for (const flags of [{ apply_merchant_rule: true }, { update_existing_merchant: true }]) {
+      const db = mockDB(); const { app, env } = harness(db);
+      const res = await req(app, env, '', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, description: 'P Murugeshan | UPI', ...flags }) });
+      expect(res.status).toBe(201);
+      expect((db as any).batch.mock.calls[0][0]).toHaveLength(2);
+    }
+  });
+
+  it('uses ON CONFLICT for same-key concurrent rule creation instead of duplicate-prone insert-only logic', async () => {
+    const db = mockDB(); const { app, env } = harness(db);
+    await req(app, env, '', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, description: 'P Murugeshan | UPI', apply_merchant_rule: true }) });
+    const sql = (db as any).prepare.mock.calls.map((c: any) => c[0]).join('\n');
+    expect(sql).toMatch(/ON CONFLICT\(user_id, normalized_merchant_name, movement_type, active\) DO UPDATE/);
+  });
+
   it('rejects invalid movement ID with valid JSON', async () => {
     const { app, env } = harness(mockDB()); const res = await req(app, env, '/abc', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     expect(res.status).toBe(400); expect(await res.json()).toEqual({ error: 'Invalid movement ID' });

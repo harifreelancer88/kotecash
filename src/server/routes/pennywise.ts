@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppContext, Bindings, Variables } from "../types";
+import { applySavedCategoryRule } from "../categorization-rules";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const MAX_BATCH = 100;
@@ -243,7 +244,7 @@ app.post("/movements", async (c: AppContext) => {
         results.push({ client_transaction_id: tx.client_transaction_id, status, error: a.issues.join("; ") }); continue;
       }
       await c.env.DB.prepare(`INSERT INTO pennywise_sync_records (user_id,client_id,client_transaction_id,sms_fingerprint,raw_sms_hash,transaction_time,sync_status,direction,amount,transaction_date,source,request_fingerprint,financial_fingerprint,reference_number,merchant) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id,client_id,client_transaction_id) DO UPDATE SET sync_status=excluded.sync_status,request_fingerprint=excluded.request_fingerprint,financial_fingerprint=excluded.financial_fingerprint,raw_sms_hash=COALESCE(excluded.raw_sms_hash,pennywise_sync_records.raw_sms_hash),transaction_time=COALESCE(excluded.transaction_time,pennywise_sync_records.transaction_time),updated_at=datetime('now')`).bind(uid, body.client_id, tx.client_transaction_id, a.smsKey ?? null, a.rawSmsHash ?? null, a.txTime ?? null, "syncing", tx.direction, a.amount, tx.transaction_date, a.source, a.request, a.financial, clean(tx.reference_number,80), clean(tx.merchant,120)).run();
-      const m = a.movement!;
+      const m = await applySavedCategoryRule(c, uid, a.movement!);
       const ins = await c.env.DB.prepare(`INSERT INTO movements (user_id,date,amount,description,category_id,src_kind,src_id,dst_kind,dst_id) VALUES (?,?,?,?,?,?,?,?,?)`).bind(uid, m.date, m.amount, m.description, m.category_id, m.src_kind, m.src_id, m.dst_kind, m.dst_id).run();
       const movementId = ins.meta.last_row_id;
       await c.env.DB.prepare(`INSERT INTO pennywise_sync_records (user_id,client_id,client_transaction_id,sms_fingerprint,raw_sms_hash,transaction_time,movement_id,sync_status,direction,amount,transaction_date,source,request_fingerprint,financial_fingerprint,reference_number,merchant) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id,client_id,client_transaction_id) DO UPDATE SET movement_id=excluded.movement_id,sync_status='created',error_code=NULL,error_message=NULL,raw_sms_hash=COALESCE(excluded.raw_sms_hash,pennywise_sync_records.raw_sms_hash),transaction_time=COALESCE(excluded.transaction_time,pennywise_sync_records.transaction_time),updated_at=datetime('now')`).bind(uid, body.client_id, tx.client_transaction_id, a.smsKey ?? null, a.rawSmsHash ?? null, a.txTime ?? null, movementId, "created", tx.direction, a.amount, tx.transaction_date, a.source, a.request, a.financial, clean(tx.reference_number,80), clean(tx.merchant,120)).run();
