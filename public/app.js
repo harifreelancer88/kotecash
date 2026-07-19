@@ -30,8 +30,15 @@ async function api(path, opts) {
   });
   if (res.status === 401) { window.location.href = "/login"; throw new Error("unauth"); }
   var text = await res.text();
-  var data = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new Error((data && data.error) || ("HTTP " + res.status));
+  var data = null;
+  if (text) {
+    try { data = JSON.parse(text); }
+    catch (e) {
+      if (!res.ok) throw new Error(text || ("HTTP " + res.status));
+      throw new Error("Server returned an invalid JSON response");
+    }
+  }
+  if (!res.ok) throw new Error((data && data.error) || text || ("HTTP " + res.status));
   return data;
 }
 
@@ -155,7 +162,8 @@ async function loadAll() {
   });
 
   M.txns = txns.map(function (t) {
-    return { id: t.id, date: t.date, cat: nameById(CATMAP, t.category_id), desc: t.description, amount: t.amount, method: t.payment_method, type: t.type, category_id: t.category_id, source: t.source, sync_status: t.sync_status, reference_number: t.reference_number };
+    var walletId = t.src_kind === "wallet" ? t.src_id : (t.dst_kind === "wallet" ? t.dst_id : t.payment_method);
+    return { id: t.id, date: t.date, cat: nameById(CATMAP, t.category_id), desc: t.description, amount: t.amount, method: nameById(WMAP, walletId) || t.payment_method, type: t.type, category_id: t.category_id, source: t.source, sync_status: t.sync_status, reference_number: t.reference_number, src_kind: t.src_kind, src_id: t.src_id, dst_kind: t.dst_kind, dst_id: t.dst_id };
   });
 
   M.income = dash.income; M.expense = dash.expense; M.net = dash.sisa;
@@ -1033,7 +1041,7 @@ function curMonth() { return new Date().toISOString().slice(0, 7); }
 function showAddTransaction(editId) {
   var t = editId ? M.txns.find(function (x) { return x.id === editId; }) : null;
   var catOpts = M.expenseCats.concat(M.incomeCats).map(function (c) { return '<option ' + (t && t.cat === c ? "selected" : "") + ">" + esc(c) + "</option>"; }).join("");
-  var methodOpts = ["Cash", "OVO", "GoPay", "Transfer", "BCA Debit", "CC BCA", "CC Tokped"].map(function (m) { return '<option ' + (t && t.method === m ? "selected" : "") + ">" + m + "</option>"; }).join("");
+  var methodOpts = M.wallets.map(function (w) { return '<option value="' + esc(w.id) + '" ' + (t && String((t.src_kind === "wallet" ? t.src_id : t.dst_id)) === String(w.id) ? "selected" : "") + ">" + esc(w.name) + "</option>"; }).join("");
   openModal(t ? "Edit Transaction" : "Add Transaction",
     '<div style="display:flex;flex-direction:column;gap:12px;">' +
       fld("mfAmount", "Amount (INR)", inp("number"), t ? t.amount : "") +
@@ -1048,10 +1056,13 @@ function showAddTransaction(editId) {
 async function saveTransaction(id) {
   var amount = parseInt(document.getElementById("mfAmount").value) || 0;
   if (!amount) return toast("Enter an amount", true);
-  var body = { amount: amount, type: document.getElementById("mfType").value, date: document.getElementById("mfDate").value, category_id: catId(document.getElementById("mfCat").value), payment_method: document.getElementById("mfMethod").value, description: document.getElementById("mfNotes").value };
+  var type = document.getElementById("mfType").value;
+  var walletId = parseInt(document.getElementById("mfMethod").value, 10);
+  if (!walletId) return toast("Choose a payment method", true);
+  var body = { amount: amount, date: document.getElementById("mfDate").value, category_id: catId(document.getElementById("mfCat").value), description: document.getElementById("mfNotes").value, src_kind: type === "expense" ? "wallet" : null, src_id: type === "expense" ? walletId : null, dst_kind: type === "income" ? "wallet" : null, dst_id: type === "income" ? walletId : null };
   try {
-    if (id) await api("/api/transactions/" + id, { method: "PUT", body: body });
-    else await api("/api/transactions", { method: "POST", body: body });
+    if (id) await api("/api/movements/" + id, { method: "PUT", body: body });
+    else await api("/api/movements", { method: "POST", body: body });
     closeModal(); await reload("ledger"); toast("Saved");
   } catch (e) { toast(e.message, true); }
 }
