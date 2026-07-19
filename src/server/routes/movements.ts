@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppContext, Bindings, Variables } from "../types";
+import { applySavedCategoryRule, bulkUpdateMerchantCategoriesStatement, extractMerchantName, merchantRuleWrite, movementType, validateCategoryForType } from "../categorization-rules";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -38,7 +39,7 @@ function validateMovementBody(body: any): { value?: any; error?: string } {
   if ((dst_kind == null) !== (dst_id == null)) return { error: "dst_kind and dst_id must be provided together" };
   if (src_kind && !OWNED_KINDS.has(src_kind)) return { error: "Invalid src_kind" };
   if (dst_kind && !OWNED_KINDS.has(dst_kind)) return { error: "Invalid dst_kind" };
-  return { value: { amount, date: body.date, description: cleanText(body.description), category_id, src_kind, src_id, dst_kind, dst_id } };
+  return { value: { amount, date: body.date, description: cleanText(body.description), category_id, src_kind, src_id, dst_kind, dst_id, apply_merchant_rule: !!body.apply_merchant_rule, update_existing_merchant: !!body.update_existing_merchant } };
 }
 
 async function validateRefs(c: AppContext, uid: number, m: any) {
@@ -84,8 +85,24 @@ app.post("/", async (c: AppContext) => {
     const refErr = await validateRefs(c, uid, parsed.value);
     if (refErr) return jsonError(c, refErr);
     const m = parsed.value;
-    const res = await c.env.DB.prepare(`INSERT INTO movements (user_id, date, amount, description, category_id, src_kind, src_id, dst_kind, dst_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(uid, m.date, m.amount, m.description, m.category_id, m.src_kind, m.src_id, m.dst_kind, m.dst_id).run();
-    return c.json({ id: res.meta.last_row_id }, 201);
+    const type = movementType(m);
+    const merchant = extractMerchantName(m.description);
+    const wantsRule = m.apply_merchant_rule || m.update_existing_merchant;
+    if (wantsRule) {
+      if (!merchant || !m.category_id) return jsonError(c, "Merchant and category are required for automatic categorization");
+      const catErr = await validateCategoryForType(c, uid, m.category_id, type);
+      if (catErr) return jsonError(c, catErr);
+    }
+    const categorized = m.apply_merchant_rule ? m : await applySavedCategoryRule(c, uid, m);
+    const writes = [c.env.DB.prepare(`INSERT INTO movements (user_id, date, amount, description, category_id, src_kind, src_id, dst_kind, dst_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(uid, categorized.date, categorized.amount, categorized.description, categorized.category_id, categorized.src_kind, categorized.src_id, categorized.dst_kind, categorized.dst_id)];
+    const rulePlan = m.apply_merchant_rule ? await merchantRuleWrite(c, uid, merchant!, m.category_id, type) : null;
+    if (rulePlan) writes.push(rulePlan.statement);
+    if (m.update_existing_merchant) writes.push(bulkUpdateMerchantCategoriesStatement(c, uid, merchant!, m.category_id, type));
+    const results = await c.env.DB.batch(writes);
+    const existing_updated = m.update_existing_merchant ? Number(results[results.length - 1]?.meta?.changes ?? 0) : 0;
+    const insertedRuleId = rulePlan && rulePlan.action === "created" ? results[1]?.meta?.last_row_id ?? null : null;
+    const rule = rulePlan ? { action: rulePlan.action, id: rulePlan.existingId ?? insertedRuleId } : null;
+    return c.json({ success: true, id: results[0].meta.last_row_id, transaction_saved: true, rule, existing_updated, applied_rule_id: categorized.applied_rule_id ?? null }, 201);
   } catch { return jsonError(c, "Unable to create movement", 500); }
 });
 
@@ -120,8 +137,22 @@ app.put("/:id", async (c: AppContext) => {
     const refErr = await validateRefs(c, uid, parsed.value);
     if (refErr) return jsonError(c, refErr);
     const m = parsed.value;
-    await c.env.DB.prepare(`UPDATE movements SET date=?, amount=?, description=?, category_id=?, src_kind=?, src_id=?, dst_kind=?, dst_id=?, updated_at=datetime('now') WHERE id=? AND user_id=?`).bind(m.date, m.amount, m.description, m.category_id, m.src_kind, m.src_id, m.dst_kind, m.dst_id, id, uid).run();
-    return c.json({ success: true, id });
+    const type = movementType(m);
+    const merchant = extractMerchantName(m.description);
+    if (m.apply_merchant_rule || m.update_existing_merchant) {
+      if (!merchant || !m.category_id) return jsonError(c, "Merchant and category are required for automatic categorization");
+      const catErr = await validateCategoryForType(c, uid, m.category_id, type);
+      if (catErr) return jsonError(c, catErr);
+    }
+    const writes = [c.env.DB.prepare(`UPDATE movements SET date=?, amount=?, description=?, category_id=?, src_kind=?, src_id=?, dst_kind=?, dst_id=?, updated_at=datetime('now') WHERE id=? AND user_id=?`).bind(m.date, m.amount, m.description, m.category_id, m.src_kind, m.src_id, m.dst_kind, m.dst_id, id, uid)];
+    const rulePlan = m.apply_merchant_rule ? await merchantRuleWrite(c, uid, merchant!, m.category_id, type) : null;
+    if (rulePlan) writes.push(rulePlan.statement);
+    if (m.update_existing_merchant) writes.push(bulkUpdateMerchantCategoriesStatement(c, uid, merchant!, m.category_id, type));
+    const results = await c.env.DB.batch(writes);
+    const existing_updated = m.update_existing_merchant ? Number(results[results.length - 1]?.meta?.changes ?? 0) : 0;
+    const insertedRuleId = rulePlan && rulePlan.action === "created" ? results[1]?.meta?.last_row_id ?? null : null;
+    const rule = rulePlan ? { action: rulePlan.action, id: rulePlan.existingId ?? insertedRuleId } : null;
+    return c.json({ success: true, id, transaction_saved: true, rule, existing_updated });
   } catch { return jsonError(c, "Unable to update movement", 500); }
 });
 

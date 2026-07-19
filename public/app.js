@@ -1033,8 +1033,12 @@ function fld(id, label, extra, val) {
 }
 function inp(t) { return '<input type="' + t + '" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" id="__" value="__">'; }
 function sel(opts) { return '<select class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" id="__">' + opts + "</select>"; }
-function saveBtn(label, onclick) { return '<button class="btn-primary w-full py-2 rounded-lg text-sm" onclick="' + onclick + '">' + label + "</button>"; }
+function saveBtn(label, onclick) { return '<button id="modalSaveBtn" class="btn-primary w-full py-2 rounded-lg text-sm" onclick="' + onclick + '">' + label + "</button>"; }
 function today() { return new Date().toISOString().slice(0, 10); }
+function extractMerchantName(notes) { var raw = notes == null ? "" : String(notes); var first = raw.indexOf("|") >= 0 ? raw.split("|")[0] : raw; return first.trim(); }
+function merchantRuleOptionsHtml() { return '<div id="merchantRuleBox" class="space-y-2 text-sm" style="color:var(--c-ink);"><label class="flex gap-2 items-start"><input id="mfApplyRule" type="checkbox" class="mt-1"><span id="mfApplyRuleText"></span></label><label class="flex gap-2 items-start"><input id="mfUpdateExisting" type="checkbox" class="mt-1"><span id="mfUpdateExistingText"></span></label></div>'; }
+function updateMerchantRuleOptions() { var cat = document.getElementById("mfCat"), notes = document.getElementById("mfNotes"), box = document.getElementById("merchantRuleBox"); if (!cat || !notes || !box) return; var category = cat.value || ""; var merchant = extractMerchantName(notes.value); var enabled = !!(category && merchant && catId(category)); box.style.display = enabled ? "block" : "none"; ["mfApplyRule","mfUpdateExisting"].forEach(function(id){ var el=document.getElementById(id); if(el) el.disabled=!enabled; }); document.getElementById("mfApplyRuleText").textContent = 'Apply “' + category + '” automatically to future transactions from “' + merchant + '”'; document.getElementById("mfUpdateExistingText").textContent = 'Update existing transactions from “' + merchant + '”'; }
+function setSaving(isSaving) { var b=document.getElementById("modalSaveBtn"); if(b){ if(!b.getAttribute("data-label")) b.setAttribute("data-label", b.textContent); b.disabled=!!isSaving; b.style.opacity=isSaving?"0.7":""; b.textContent=isSaving?"Saving…":(b.getAttribute("data-label")||"Save"); } }
 function curMonth() { return new Date().toISOString().slice(0, 7); }
 
 /* Transactions */
@@ -1047,11 +1051,14 @@ function showAddTransaction(editId) {
       fld("mfAmount", "Amount (INR)", inp("number"), t ? t.amount : "") +
       '<div class="grid grid-cols-2 gap-3">' + fld("mfType", "Type", sel('<option value="expense" ' + (t && t.type === "expense" ? "selected" : "") + ">Expense</option><option value=\"income\" " + (t && t.type === "income" ? "selected" : "") + ">Income</option>")) + fld("mfDate", "Date", inp("date").replace('value=""', ""), t ? t.date : today()) + "</div>" +
       fld("mfCat", "Category", sel(catOpts)) +
-      fld("mfMethod", "Payment Method", sel(methodOpts)) +
       fld("mfNotes", "Notes", inp("text"), t ? t.desc : "") +
+      merchantRuleOptionsHtml() +
+      fld("mfMethod", "Payment Method", sel(methodOpts)) +
       saveBtn(t ? "Save" : "Add Transaction", "saveTransaction(" + (editId || "0") + ")") +
     "</div>"
   );
+  ["mfCat","mfNotes"].forEach(function(id){ var el=document.getElementById(id); if(el) el.addEventListener(id === "mfCat" ? "change" : "input", updateMerchantRuleOptions); });
+  updateMerchantRuleOptions();
 }
 async function saveTransaction(id) {
   var amount = parseInt(document.getElementById("mfAmount").value) || 0;
@@ -1059,12 +1066,15 @@ async function saveTransaction(id) {
   var type = document.getElementById("mfType").value;
   var walletId = parseInt(document.getElementById("mfMethod").value, 10);
   if (!walletId) return toast("Choose a payment method", true);
-  var body = { amount: amount, date: document.getElementById("mfDate").value, category_id: catId(document.getElementById("mfCat").value), description: document.getElementById("mfNotes").value, src_kind: type === "expense" ? "wallet" : null, src_id: type === "expense" ? walletId : null, dst_kind: type === "income" ? "wallet" : null, dst_id: type === "income" ? walletId : null };
+  var body = { amount: amount, date: document.getElementById("mfDate").value, category_id: catId(document.getElementById("mfCat").value), description: document.getElementById("mfNotes").value, src_kind: type === "expense" ? "wallet" : null, src_id: type === "expense" ? walletId : null, dst_kind: type === "income" ? "wallet" : null, dst_id: type === "income" ? walletId : null, apply_merchant_rule: !!(document.getElementById("mfApplyRule") && document.getElementById("mfApplyRule").checked), update_existing_merchant: !!(document.getElementById("mfUpdateExisting") && document.getElementById("mfUpdateExisting").checked) };
   try {
-    if (id) await api("/api/movements/" + id, { method: "PUT", body: body });
-    else await api("/api/movements", { method: "POST", body: body });
-    closeModal(); await reload("ledger"); toast("Saved");
-  } catch (e) { toast(e.message, true); }
+    setSaving(true);
+    var r;
+    if (id) r = await api("/api/movements/" + id, { method: "PUT", body: body });
+    else r = await api("/api/movements", { method: "POST", body: body });
+    closeModal(); await reload("ledger");
+    var msg = "Transaction saved."; if (r && r.rule) msg += " Future rule " + (r.rule.action === "created" ? "created" : "updated") + "."; if (r && body.update_existing_merchant) msg += " " + (r.existing_updated || 0) + " existing transactions recategorized."; toast(msg);
+  } catch (e) { toast(e.message, true); } finally { setSaving(false); }
 }
 async function editTransaction(id) { showAddTransaction(id); }
 async function deleteTransaction(id) {
