@@ -19,7 +19,12 @@ function positiveAmount(v: any) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function validDate(v: any) { return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v); }
+function validDate(v: any) {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+function parseMovementId(v: any) { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; }
 function cleanText(v: any) { return v == null ? null : String(v).trim() || null; }
 function nullableId(v: any) { if (v == null || v === "") return null; const n = Number(v); return Number.isInteger(n) && n > 0 ? n : NaN; }
 
@@ -62,6 +67,8 @@ app.get("/", async (c: AppContext) => {
   const walletId = c.req.query("wallet_id");
   const category = c.req.query("category");
   const month = c.req.query("month");
+  const dateFrom = c.req.query("date_from");
+  const dateTo = c.req.query("date_to");
   const q = c.req.query("q");
   const includeExcluded = c.req.query("include_excluded") === "true";
 
@@ -71,6 +78,9 @@ app.get("/", async (c: AppContext) => {
   if (walletId) { sql += " AND ((src_kind='wallet' AND src_id=?) OR (dst_kind='wallet' AND dst_id=?))"; args.push(Number(walletId), Number(walletId)); }
   if (category && category !== "all") { sql += " AND category_id=?"; args.push(Number(category)); }
   if (month) { sql += " AND date LIKE ?"; args.push(`${month}%`); }
+  if (dateFrom) { if (!validDate(dateFrom)) return jsonError(c, "Invalid date_from", 400); sql += " AND date>=?"; args.push(dateFrom); }
+  if (dateTo) { if (!validDate(dateTo)) return jsonError(c, "Invalid date_to", 400); sql += " AND date<=?"; args.push(dateTo); }
+  if (dateFrom && dateTo && dateFrom > dateTo) return jsonError(c, "date_from must be before or equal to date_to", 400);
   if (q) { sql += " AND description LIKE ?"; args.push(`%${q}%`); }
   sql += " ORDER BY date DESC, id DESC";
   const res = await c.env.DB.prepare(sql).bind(...args).all();
@@ -156,11 +166,42 @@ app.put("/:id", async (c: AppContext) => {
   } catch { return jsonError(c, "Unable to update movement", 500); }
 });
 
+const BULK_DELETE_LIMIT = 100;
+
+async function deleteMovements(c: AppContext, uid: number, ids: number[]) {
+  const uniqueIds = Array.from(new Set(ids));
+  if (!uniqueIds.length) return { error: "movement_ids must not be empty", status: 400 };
+  if (uniqueIds.length > BULK_DELETE_LIMIT) return { error: `Cannot delete more than ${BULK_DELETE_LIMIT} movements at once`, status: 400 };
+  const placeholders = uniqueIds.map(() => "?").join(",");
+  const rows = (await c.env.DB.prepare(`SELECT id FROM movements WHERE user_id=? AND id IN (${placeholders})`).bind(uid, ...uniqueIds).all<any>()).results || [];
+  const found = new Set(rows.map((r: any) => Number(r.id)));
+  const missing = uniqueIds.filter((id) => !found.has(id));
+  if (missing.length) return { error: "Movement not found", status: 404, missing_ids: missing };
+  const stmts = uniqueIds.map((id) => c.env.DB.prepare("DELETE FROM movements WHERE id=? AND user_id=?").bind(id, uid));
+  try { await c.env.DB.batch(stmts); } catch { return { error: "Unable to delete movement", status: 409 }; }
+  return { requested_count: ids.length, deleted_count: uniqueIds.length, deleted_ids: uniqueIds };
+}
+
+app.post("/bulk-delete", async (c: AppContext) => {
+  const uid = c.get("userId");
+  let body: any;
+  try { body = await parseJson(c); } catch { return jsonError(c, "Request body must be valid JSON"); }
+  const rawIds = body.movement_ids;
+  if (!Array.isArray(rawIds)) return jsonError(c, "movement_ids must be an array");
+  const ids = rawIds.map(parseMovementId);
+  if (ids.some((id: number | null) => id == null)) return jsonError(c, "Invalid movement ID", 400);
+  const result: any = await deleteMovements(c, uid, ids as number[]);
+  if (result.error) return c.json(result, result.status as any);
+  return c.json({ success: true, ...result });
+});
+
 app.delete("/:id", async (c: AppContext) => {
   const uid = c.get("userId");
-  const id = c.req.param("id");
-  await c.env.DB.prepare("DELETE FROM movements WHERE id=? AND user_id=?").bind(id, uid).run();
-  return c.json({ success: true });
+  const id = parseMovementId(c.req.param("id"));
+  if (!id) return jsonError(c, "Invalid movement ID", 400);
+  const result: any = await deleteMovements(c, uid, [id]);
+  if (result.error) return c.json(result, result.status as any);
+  return c.json({ success: true, deleted: true, id });
 });
 
 export default app;
