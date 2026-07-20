@@ -19,6 +19,7 @@ var M = {
 var WMAP = {}, DMAP = {}, PMAP = {}, GMAP = {}, CATMAP = {};
 var charts = {};
 var currentPage = "dashboard";
+var ledgerState = { selectionMode: false, selected: new Set(), deleting: false, filters: { q: "", cat: "", type: "", dateMode: "all", date: "", from: "", to: "", month: "" } };
 
 // ── fetch wrapper (cookie auth) ──────────────────────────────────
 async function api(path, opts) {
@@ -415,80 +416,40 @@ function renderDashboard() {
 
 function ledgerRowHTML(t) {
   var isIncome = t.type === "income";
+  var selected = ledgerState.selected.has(String(t.id));
   var amt = (isIncome ? "+" : "−") + " " + fmtMoney(t.amount);
   var amtColor = isIncome ? "text-[#4A8C6F]" : "text-[#C44B4B]";
-  // Desktop: flat single-line row
-  var desktop =
-    '<div class="card-row ledger-row hidden md:flex">' +
-      '<span class="mono text-[11px] flex-shrink-0" style="color:var(--c-sub);width:68px;">' + (t.date || "") + "</span>" +
-      '<span class="text-[11px] font-medium flex-shrink-0" style="width:60px;">' + esc(t.cat || "?") + "</span>" +
-      '<span class="text-[11px] flex-1 truncate" style="color:var(--c-sub);min-width:0;">' + esc(t.desc || "") + (t.source === "pennywise_sms" ? ' <span class="px-1.5 py-0.5 rounded-full" style="background:rgba(122,170,206,.16);color:var(--c-primary);">PennyWise SMS</span>' : '') + (t.reference_number ? ' <span class="mono">' + esc(t.reference_number) + '</span>' : '') + "</span>" +
-      '<span class="text-[10px] flex-shrink-0 hidden sm:inline" style="color:var(--c-sub);width:48px;">' + esc(t.method || "") + "</span>" +
-      '<span class="mono text-[11px] text-right flex-shrink-0 font-medium ' + amtColor + '" style="width:105px;">' + amt + "</span>" +
-      '<span class="hidden md:flex gap-1 flex-shrink-0">' +
-        '<button class="p-1" aria-label="Edit ledger transaction" title="Edit ledger transaction" style="color:var(--c-sub);" onclick="editTransaction(' + t.id + ')"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>' +
-        '<button class="p-1" aria-label="Delete ledger transaction" title="Delete ledger transaction" style="color:var(--c-sub);" onclick="deleteTransaction(' + t.id + ')"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>' +
-      "</span>" +
-    "</div>";
-  // Mobile: 2-line stacked row
-  var mobile =
-    '<div class="card-row ledger-row flex md:hidden flex-col items-stretch gap-1">' +
-      '<div class="flex items-start justify-between gap-2 min-w-0">' +
-        '<span class="text-sm font-medium min-w-0 truncate" style="color:var(--c-ink);">' + esc(t.desc || (t.cat || "")) + "</span>" +
-        '<span class="mono text-sm font-semibold flex-shrink-0 ' + amtColor + '">' + amt + "</span>" +
-      "</div>" +
-      '<div class="flex items-center gap-1.5 text-[11px] min-w-0" style="color:var(--c-sub);">' +
-        "<span>" + esc(t.cat || "?") + "</span>" +
-        (t.method ? '<span>·</span><span>' + esc(t.method) + "</span>" : "") +
-        (t.source === "pennywise_sms" ? '<span>·</span><span style="color:var(--c-primary);">PennyWise SMS</span>' : "") +
-        "<span>·</span><span class='mono'>" + (t.date || "") + "</span>" +
-        '<button class="ml-auto p-1 flex-shrink-0" aria-label="Open ledger transaction actions" title="Transaction actions" style="color:var(--c-sub);" onclick="toggleLedgerDropdown(this)"><i data-lucide="ellipsis-vertical" class="w-4 h-4"></i></button>' +
-      "</div>" +
-      '<div class="ledger-dropdown" style="display:none;position:absolute;right:4px;top:38px;background:var(--c-card);border:1px solid var(--c-border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(53,88,114,0.10);z-index:30;padding:4px;min-width:120px;">' +
-        '<button class="flex items-center gap-2 w-full px-3 py-2 rounded text-xs hover:bg-[rgba(53,88,114,0.05)]" style="color:var(--c-ink);" onclick="editTransaction(' + t.id + ')"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Edit</button>' +
-        '<button class="flex items-center gap-2 w-full px-3 py-2 rounded text-xs hover:bg-[rgba(196,75,75,0.05)]" style="color:var(--c-danger);" onclick="deleteTransaction(' + t.id + ')"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete</button>' +
-      "</div>" +
-    "</div>";
-  return desktop + mobile;
+  var title = pennywiseTitle(t);
+  var meta = esc(t.cat || "?") + (t.method ? " · " + esc(t.method) : "") + " · " + esc(fmtLedgerDate(t.date));
+  var source = (t.source === "pennywise_sms" ? "UPI · PennyWise" : (t.reference_number || ""));
+  var checkbox = '<input type="checkbox" class="ledger-check" aria-label="Select transaction" '+(selected?'checked ':'')+'onclick="event.stopPropagation();toggleLedgerSelection('+t.id+', this.checked)">';
+  return '<article class="ledger-item ledger-row '+(selected?'ledger-selected':'')+'" data-id="'+esc(t.id)+'" onclick="ledgerCardClick(event,'+t.id+')">' +
+    '<div class="ledger-select-cell" '+(ledgerState.selectionMode?'':'aria-hidden="true"')+'>'+checkbox+'</div>' +
+    '<div class="ledger-date mono">'+esc(t.date||'')+'</div>' +
+    '<div class="ledger-main min-w-0"><div class="ledger-title">'+esc(title)+'</div><div class="ledger-meta">'+meta+'</div>'+(source?'<div class="ledger-source">'+esc(source)+'</div>':'')+'</div>' +
+    '<div class="ledger-amount mono '+amtColor+'">'+amt+'</div>' +
+    '<div class="ledger-actions">' +
+      '<button class="ledger-icon" aria-label="Edit transaction" title="Edit" onclick="event.stopPropagation();editTransaction('+t.id+')"><i data-lucide="pencil" class="w-4 h-4"></i></button>' +
+      '<button class="ledger-icon danger" aria-label="Delete transaction" title="Delete" onclick="event.stopPropagation();deleteTransaction('+t.id+')"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
+      '<button class="ledger-menu-btn" aria-label="Open transaction actions" title="Actions" onclick="event.stopPropagation();toggleLedgerDropdown(this)"><i data-lucide="ellipsis-vertical" class="w-5 h-5"></i></button>' +
+      '<div class="ledger-dropdown" style="display:none"><button onclick="event.stopPropagation();editTransaction('+t.id+')">Edit</button><button class="danger" onclick="event.stopPropagation();deleteTransaction('+t.id+')">Delete</button></div>' +
+    '</div></article>';
 }
 
-function renderLedger() {
-  var rows = M.txns.map(ledgerRowHTML).join("");
-  var cats = M.expenseCats.concat(M.incomeCats);
-  var catOpts = cats.map(function (c) { return "<option>" + esc(c) + "</option>"; }).join("");
-
-  return (
-    '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Ledger</h1>' +
-    '<p class="page-subtitle">View and manage all your financial transactions</p>' +
-    '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">' +
-      '<div class="flex flex-col sm:flex-row flex-wrap gap-2 flex-1">' +
-        '<input id="ledSearch" placeholder="Search notes..." class="input input-sm bg-white text-sm w-full sm:flex-1 sm:min-w-[150px] sm:max-w-xs" style="border-color: var(--c-focus);" oninput="filterLedger()">' +
-        '<div class="flex gap-2">' +
-          '<select id="ledCat" class="select select-sm bg-white text-sm flex-1" style="border-color: var(--c-focus);" onchange="filterLedger()"><option value="">All Categories</option>' + catOpts + "</select>" +
-          '<select id="ledType" class="select select-sm bg-white text-sm flex-1" style="border-color: var(--c-focus);" onchange="filterLedger()"><option value="">All</option><option>Income</option><option>Expense</option></select>' +
-        "</div>" +
-      "</div>" +
-      '<button class="btn-primary px-4 py-2 rounded-lg text-sm flex items-center justify-center gap-1.5 flex-shrink-0" onclick="showAddTransaction()"><i data-lucide="plus" class="w-4 h-4"></i> Add</button>' +
-    "</div>" +
-    '<div id="ledgerRows">' + (rows || '<div class="card-row"><span class="text-xs" style="color:var(--c-sub);">No transactions</span></div>') + "</div>"
-  );
-}
-
-function filterLedger() {
-  var q = (document.getElementById("ledSearch").value || "").toLowerCase();
-  var cat = document.getElementById("ledCat").value;
-  var type = document.getElementById("ledType").value.toLowerCase();
-  var rows = M.txns.filter(function (t) {
-    if (q && (t.desc || "").toLowerCase().indexOf(q) < 0) return false;
-    if (cat && t.cat !== cat) return false;
-    if (type && t.type !== type) return false;
-    return true;
-  });
-  var html = rows.map(ledgerRowHTML).join("");
-  document.getElementById("ledgerRows").innerHTML = html || '<div class="card-row"><span class="text-xs" style="color:var(--c-sub);">No transactions</span></div>';
-  if (window.lucide) lucide.createIcons();
-}
-
+function ledgerDateRange() { var f=ledgerState.filters, y, m, last; if (f.dateMode === "specific" && f.date) return { from:f.date, to:f.date }; if (f.dateMode === "range") return { from:f.from, to:f.to }; if (f.dateMode === "month" && f.month) { y=+f.month.slice(0,4); m=+f.month.slice(5,7); last=new Date(Date.UTC(y,m,0)).toISOString().slice(0,10); return { from:f.month+"-01", to:last }; } return {}; }
+function getFilteredLedgerRows() { var f=ledgerState.filters, r=ledgerDateRange(); return M.txns.filter(function(t){ if(f.q && (t.desc||"").toLowerCase().indexOf(f.q.toLowerCase())<0) return false; if(f.cat && t.cat!==f.cat) return false; if(f.type && t.type!==f.type) return false; if(r.from && t.date<r.from) return false; if(r.to && t.date>r.to) return false; return true; }); }
+function activeLedgerFilterCount(){ var f=ledgerState.filters, n=0; if(f.q)n++; if(f.cat)n++; if(f.type)n++; if(f.dateMode!=="all")n++; return n; }
+function renderLedgerControls(){ var cats=M.expenseCats.concat(M.incomeCats), catOpts=cats.map(function(c){return '<option '+(ledgerState.filters.cat===c?'selected':'')+'>'+esc(c)+'</option>';}).join(''); var f=ledgerState.filters; return '<div class="ledger-toolbar"><input id="ledSearch" placeholder="Search notes..." class="input input-sm bg-white text-sm ledger-search" value="'+esc(f.q)+'" oninput="filterLedger()"><button class="ledger-filter-toggle" onclick="toggleLedgerFilters()">Filters'+(activeLedgerFilterCount()? ' ('+activeLedgerFilterCount()+')':'')+'</button><button class="ledger-filter-toggle" onclick="setLedgerSelectionMode('+(!ledgerState.selectionMode)+')">'+(ledgerState.selectionMode?'Cancel':'Select')+'</button><button class="btn-primary ledger-add" '+(ledgerState.selectionMode?'disabled':'')+' onclick="showAddTransaction()"><i data-lucide="plus" class="w-4 h-4"></i> Add</button></div><div id="ledgerFilters" class="ledger-filters"><select id="ledCat" onchange="filterLedger()"><option value="">All Categories</option>'+catOpts+'</select><select id="ledType" onchange="filterLedger()"><option value="">All</option><option '+(f.type==='income'?'selected':'')+'>Income</option><option '+(f.type==='expense'?'selected':'')+'>Expense</option></select><select id="ledDateMode" onchange="filterLedger()"><option value="all">All dates</option><option value="specific" '+(f.dateMode==='specific'?'selected':'')+'>Specific date</option><option value="range" '+(f.dateMode==='range'?'selected':'')+'>Date range</option><option value="month" '+(f.dateMode==='month'?'selected':'')+'>Month</option></select><input id="ledDate" type="date" value="'+esc(f.date)+'" onchange="filterLedger()"><input id="ledFrom" type="date" value="'+esc(f.from)+'" onchange="filterLedger()"><input id="ledTo" type="date" value="'+esc(f.to)+'" onchange="filterLedger()"><input id="ledMonth" type="month" value="'+esc(f.month)+'" onchange="filterLedger()"><button onclick="clearLedgerFilters()">Clear all</button></div><div id="ledgerBulk"></div>'; }
+function renderLedger() { var rows=getFilteredLedgerRows(); return '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">Ledger</h1><p class="page-subtitle">View and manage your financial transactions</p>'+renderLedgerControls()+'<div id="ledgerRows">'+(rows.map(ledgerRowHTML).join('')||'<div class="card-row"><span class="text-xs" style="color:var(--c-sub);">No transactions match these filters.</span></div>')+'</div>'; }
+function refreshLedgerRows(){ var rows=getFilteredLedgerRows(); var el=document.getElementById('ledgerRows'); if(el) el.innerHTML=rows.map(ledgerRowHTML).join('')||'<div class="card-row"><span class="text-xs" style="color:var(--c-sub);">No transactions match these filters.</span></div>'; var bulk=document.getElementById('ledgerBulk'); if(bulk) bulk.innerHTML=ledgerState.selected.size?'<div class="ledger-bulk"><b>'+ledgerState.selected.size+' selected</b><button onclick="selectAllVisibleLedger()">Select all visible</button><button onclick="clearLedgerSelection()">Clear selection</button><button class="danger" '+(ledgerState.deleting?'disabled':'')+' onclick="bulkDeleteTransactions()">Delete selected</button></div>':''; if(window.lucide)lucide.createIcons(); }
+function filterLedger(){ var f=ledgerState.filters; var q=document.getElementById('ledSearch'), cat=document.getElementById('ledCat'), type=document.getElementById('ledType'), dm=document.getElementById('ledDateMode'); if(q)f.q=q.value||''; if(cat)f.cat=cat.value||''; if(type)f.type=(type.value||'').toLowerCase(); if(dm)f.dateMode=dm.value||'all'; ['Date','From','To','Month'].forEach(function(k){var el=document.getElementById('led'+k); if(el) f[k.toLowerCase()]=el.value||'';}); refreshLedgerRows(); }
+function clearLedgerFilters(){ ledgerState.filters={q:'',cat:'',type:'',dateMode:'all',date:'',from:'',to:'',month:''}; renderPage('ledger'); }
+function toggleLedgerFilters(){ var el=document.getElementById('ledgerFilters'); if(el) el.classList.toggle('open'); }
+function setLedgerSelectionMode(on){ ledgerState.selectionMode=!!on; if(!on) ledgerState.selected.clear(); renderPage('ledger'); }
+function toggleLedgerSelection(id, checked){ if(checked) ledgerState.selected.add(String(id)); else ledgerState.selected.delete(String(id)); if(ledgerState.selected.size) ledgerState.selectionMode=true; refreshLedgerRows(); }
+function ledgerCardClick(e,id){ if(ledgerState.selectionMode) toggleLedgerSelection(id,!ledgerState.selected.has(String(id))); }
+function selectAllVisibleLedger(){ getFilteredLedgerRows().forEach(function(t){ ledgerState.selected.add(String(t.id)); }); ledgerState.selectionMode=true; refreshLedgerRows(); }
+function clearLedgerSelection(){ ledgerState.selected.clear(); refreshLedgerRows(); }
 function toggleLedgerDropdown(btn) {
   document.querySelectorAll(".ledger-dropdown").forEach(function (d) { if (d !== btn.parentElement.querySelector(".ledger-dropdown")) d.style.display = "none"; });
   var dd = btn.parentElement.querySelector(".ledger-dropdown");
@@ -1051,6 +1012,8 @@ function merchantRuleOptionsHtml() { return '<div id="merchantRuleBox" class="sp
 function updateMerchantRuleOptions() { var cat = document.getElementById("mfCat"), notes = document.getElementById("mfNotes"), box = document.getElementById("merchantRuleBox"); if (!cat || !notes || !box) return; var category = cat.value || ""; var merchant = extractMerchantName(notes.value); var enabled = !!(category && merchant && catId(category)); box.style.display = enabled ? "block" : "none"; ["mfApplyRule","mfUpdateExisting"].forEach(function(id){ var el=document.getElementById(id); if(el) el.disabled=!enabled; }); document.getElementById("mfApplyRuleText").textContent = 'Apply “' + category + '” automatically to future transactions from “' + merchant + '”'; document.getElementById("mfUpdateExistingText").textContent = 'Update existing transactions from “' + merchant + '”'; }
 function setSaving(isSaving) { var b=document.getElementById("modalSaveBtn"); if(b){ if(!b.getAttribute("data-label")) b.setAttribute("data-label", b.textContent); b.disabled=!!isSaving; b.style.opacity=isSaving?"0.7":""; b.textContent=isSaving?"Saving…":(b.getAttribute("data-label")||"Save"); } }
 function curMonth() { return new Date().toISOString().slice(0, 7); }
+function fmtLedgerDate(v) { if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return v || ""; var p=v.split("-"); return new Date(Date.UTC(+p[0], +p[1]-1, +p[2])).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric", timeZone:"UTC" }); }
+function pennywiseTitle(t) { return extractMerchantName(t.desc) || t.cat || "Transaction"; }
 
 /* Transactions */
 function showAddTransaction(editId) {
@@ -1089,8 +1052,10 @@ async function saveTransaction(id) {
 }
 async function editTransaction(id) { showAddTransaction(id); }
 async function deleteTransaction(id) {
-  if (!confirm("Delete this transaction?")) return;
-  try { await api("/api/transactions/" + id, { method: "DELETE" }); await reload("ledger"); toast("Deleted"); } catch (e) { toast(e.message, true); }
+  if (ledgerState.deleting || !confirm("Delete this transaction? This action cannot be undone.")) return;
+  try { ledgerState.deleting = true; await api("/api/movements/" + id, { method: "DELETE" }); M.txns = M.txns.filter(function(t){ return String(t.id) !== String(id); }); ledgerState.selected.delete(String(id)); refreshLedgerRows(); toast("Transaction deleted."); } catch (e) { toast(e.message, true); } finally { ledgerState.deleting = false; }
+}
+async function bulkDeleteTransactions() { var ids=Array.from(ledgerState.selected); if(!ids.length)return; if(ledgerState.deleting || !confirm("Delete " + ids.length + " selected transactions? This action cannot be undone.")) return; try { ledgerState.deleting=true; var r=await api("/api/movements/bulk-delete", { method:"POST", body:{ movement_ids: ids } }); var gone=new Set((r.deleted_ids||ids).map(String)); M.txns=M.txns.filter(function(t){return !gone.has(String(t.id));}); ledgerState.selected.clear(); ledgerState.selectionMode=false; refreshLedgerRows(); toast((r.deleted_count||ids.length)+" transactions deleted."); } catch(e) { toast(e.message,true); refreshLedgerRows(); } finally { ledgerState.deleting=false; }
 }
 
 /* Categories */

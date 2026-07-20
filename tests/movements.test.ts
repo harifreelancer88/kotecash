@@ -5,7 +5,7 @@ import { Hono } from 'hono';
 function mockDB(opts: { failRun?: boolean; failBatch?: boolean; missingMovement?: boolean; missingCategory?: boolean; missingWallet?: boolean; existingRule?: boolean } = {}) {
   const prepare = vi.fn((query: string) => ({
     bind: vi.fn((...binds: any[]) => ({
-      all: vi.fn(async () => ({ results: query.includes('FROM movements') ? [{ id: 1, amount: 100 }] : [] })),
+      all: vi.fn(async () => ({ results: query.includes('FROM movements') ? (opts.missingMovement ? [] : (query.includes(' id IN ') ? binds.slice(1).map((id: any) => ({ id: Number(id), amount: 100 })) : [{ id: 1, amount: 100 }])) : [] })),
       first: vi.fn(async () => {
         if (query.includes('FROM merchant_categorization_rules')) return opts.existingRule ? { id: 44 } : null;
         if (query.includes('FROM movements')) return opts.missingMovement ? null : { id: binds[0] };
@@ -118,5 +118,35 @@ describe('movements route', () => {
     expect(res.status).toBe(400); expect(await res.json()).toEqual({ error: 'Amount must be positive' });
     h = harness(mockDB({ failRun: true })); res = await req(h.app, h.env, '/5', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     expect(res.status).toBe(500); expect(await res.json()).toEqual({ error: 'Unable to update movement' });
+  });
+});
+
+describe('movement deletion regressions', () => {
+  it('DELETE removes an existing user-owned movement through canonical movement endpoint', async () => {
+    const db = mockDB(); const { app, env } = harness(db);
+    const res = await req(app, env, '/5', { method: 'DELETE' });
+    expect(res.status).toBe(200); expect(await res.json()).toMatchObject({ success: true, deleted: true, id: 5 });
+    const sql = (db as any).prepare.mock.calls.map((c: any) => c[0]).join('\n');
+    expect(sql).toMatch(/DELETE FROM movements WHERE id=\? AND user_id=\?/);
+  });
+  it('DELETE returns JSON 404 for missing or inaccessible movement', async () => {
+    const db = mockDB({ missingMovement: true }); const { app, env } = harness(db);
+    const res = await req(app, env, '/5', { method: 'DELETE' });
+    expect(res.status).toBe(404); expect(await res.json()).toMatchObject({ error: 'Movement not found', missing_ids: [5] });
+  });
+  it('bulk delete deduplicates IDs and uses one DB.batch for atomic deletion', async () => {
+    const db = mockDB(); const { app, env } = harness(db);
+    const res = await req(app, env, '/bulk-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ movement_ids: [5, '5', 6] }) });
+    expect(res.status).toBe(200); expect(await res.json()).toMatchObject({ success: true, requested_count: 3, deleted_count: 2, deleted_ids: [5, 6] });
+    expect((db as any).batch).toHaveBeenCalledTimes(1);
+    expect((db as any).batch.mock.calls[0][0]).toHaveLength(2);
+  });
+  it('bulk delete rejects empty and invalid batches before deleting', async () => {
+    let h = harness(mockDB()); let res = await req(h.app, h.env, '/bulk-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ movement_ids: [] }) });
+    expect(res.status).toBe(400); expect(await res.json()).toMatchObject({ error: 'movement_ids must not be empty' });
+    expect((h.env.DB as any).batch).not.toHaveBeenCalled();
+    h = harness(mockDB()); res = await req(h.app, h.env, '/bulk-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ movement_ids: ['abc'] }) });
+    expect(res.status).toBe(400); expect(await res.json()).toEqual({ error: 'Invalid movement ID' });
+    expect((h.env.DB as any).batch).not.toHaveBeenCalled();
   });
 });

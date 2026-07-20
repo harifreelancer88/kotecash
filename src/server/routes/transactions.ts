@@ -11,6 +11,8 @@ app.get("/", async (c: AppContext) => {
   const category = c.req.query("category");
   const type = c.req.query("type");
   const includeExcluded = c.req.query("include_excluded") === "true";
+  const dateFrom = c.req.query("date_from");
+  const dateTo = c.req.query("date_to");
 
   let sql = `SELECT m.*, p.sync_status as pennywise_sync_status, p.reference_number as pennywise_reference_number
              FROM movements m
@@ -20,6 +22,8 @@ app.get("/", async (c: AppContext) => {
   if (!includeExcluded) sql += " AND COALESCE(m.status,'active')='active'";
   if (search) { sql += " AND m.description LIKE ?"; args.push(`%${search}%`); }
   if (category && category !== "all") { sql += " AND m.category_id=?"; args.push(Number(category)); }
+  if (dateFrom) { sql += " AND m.date>=?"; args.push(dateFrom); }
+  if (dateTo) { sql += " AND m.date<=?"; args.push(dateTo); }
   if (type === "income") sql += " AND m.src_kind IS NULL";
   if (type === "expense") sql += " AND m.dst_kind IS NULL";
   sql += " ORDER BY m.date DESC, m.id DESC";
