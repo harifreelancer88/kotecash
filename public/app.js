@@ -231,7 +231,7 @@ function navigate(id, push) {
   if (id === "networth") initNetWorthChart();
   if (id === "scenarios") { initScenarioChart(); updateScenario(); }
   if (id === "account") loadAccountInfo();
-  if (id === "api") loadTokens();
+  if (id === "api") loadTokens({ render: false });
   if (id === "pennywise" && !M._pennywiseLoaded) loadPennyWiseSummary();
   if (id === "wealth" && window.WealthRouter) window.WealthRouter.load();
   if (id === "imports") setTimeout(loadImportsPage,0);
@@ -334,11 +334,22 @@ function openModal(title, bodyHTML) {
     "</div>";
   mask.addEventListener("click", function (e) { if (e.target === mask) closeModal(); });
   document.body.appendChild(mask);
+  document.body.classList.add("modal-open");
 }
 function closeModal() {
   document.querySelectorAll(".modal-mask").forEach(function (m) { m.remove(); });
+  document.body.classList.remove("modal-open");
 }
-document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+document.addEventListener("keydown", function (e) {
+  if (tokenModalState && tokenModalState.open && e.key === "Tab") {
+    var modal = document.querySelector("#tokenModalMask .modal-content");
+    if (modal) {
+      var nodes = Array.prototype.slice.call(modal.querySelectorAll("button,input,textarea,select,a,[tabindex]:not([tabindex='-1'])")).filter(function(x){ return !x.disabled && x.offsetParent !== null; });
+      if (nodes.length) { var first = nodes[0], last = nodes[nodes.length - 1]; if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } }
+    }
+  }
+  if (e.key === "Escape") { if (tokenModalState && tokenModalState.open) closeTokenModal(e); else closeModal(); }
+});
 
 // reload helper after a mutation
 async function reload(toPage) {
@@ -1013,7 +1024,7 @@ function renderAPI() {
   }).join("");
   var tokenRows = (M._tokens || []).map(function (t) { return '<tr><td class="p-2">' + esc(t.label) + '</td><td class="p-2 mono text-xs">' + esc(t.prefix) + '</td><td class="p-2 text-xs" style="color:var(--c-sub);">' + (t.created_at || "").slice(0, 10) + '</td><td class="p-2"><button class="text-xs hover:underline" style="color:var(--c-danger);" onclick="revokeToken(' + t.id + ')">Revoke</button></td></tr>'; }).join("");
   return '<h1 class="text-2xl font-bold" style="color: var(--c-primary);">API & AI</h1><p class="page-subtitle">Manage API tokens and view integration docs for AI agents</p>' +
-    '<div class="card p-5 mb-4"><div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3"><div class="section-title" style="margin-bottom:0;">Active Tokens</div><button class="btn-primary px-3 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1 w-full sm:w-auto" onclick="generateToken()"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Generate</button></div>' +
+    '<div class="card p-5 mb-4"><div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3"><div class="section-title" style="margin-bottom:0;">Active Tokens</div><button id="generateTokenBtn" type="button" class="btn-primary px-3 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1 w-full sm:w-auto" onclick="openTokenModal(event)"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Generate</button></div>' +
     '<div id="newTokenWrap"></div><div class="overflow-x-auto"><table class="w-full text-sm" style="min-width:380px"><thead><tr class="border-b" style="font-size:10px;color:var(--c-sub);text-transform:uppercase;letter-spacing:0.05em;border-color:rgba(53,88,114,0.08);"><th class="p-2 text-left">Label</th><th class="p-2 text-left">Prefix</th><th class="p-2 text-left">Created</th><th class="p-2"></th></tr></thead><tbody>' + (tokenRows || '<tr><td colspan="4" class="p-2 text-xs" style="color:var(--c-sub);">No tokens</td></tr>') + "</tbody></table></div></div>" +
     '<div class="card p-5"><div class="flex items-center justify-between mb-2"><div class="section-title" style="margin-bottom:0;">Quick Start</div><button class="text-xs flex items-center gap-1 px-2 py-1 rounded" style="color:var(--c-sub);background:rgba(53,88,114,0.04);" onclick="copyCode(\'apiQuickStart\')"><i data-lucide="copy" class="w-3 h-3"></i> Copy</button></div><pre id="apiQuickStart" class="code-block p-4 rounded-lg text-xs mb-4" style="background:#1e293b;color:#e2e8f0;">export KOTECASH_TOKEN="kote_..."\nexport KOTECASH_BASE="' + API_BASE + '"\n\ncurl -H "Authorization: Bearer $KOTECASH_TOKEN" \\\n     "$KOTECASH_BASE/api/dashboard"</pre><div class="section-title">Endpoints</div>' + apiCards + "</div>";
 }
@@ -1290,12 +1301,82 @@ async function changePassword() { var p = document.getElementById("acctPwd").val
 async function loadAccountInfo() { try { var me = await api("/api/auth/me"); var u = me.user; document.getElementById("acctInfo").innerHTML = '<div><span style="color: var(--c-sub);">Email:</span> ' + esc(u.email) + '</div><div><span style="color: var(--c-sub);">Created:</span> ' + (u.created_at || "").slice(0, 10) + "</div>"; } catch (e) {} }
 
 /* Tokens */
-async function generateToken() {
-  var label = prompt("Token label?", "hermes-agent"); if (!label) return;
-  try { var r = await api("/api/tokens", { method: "POST", body: { label: label } }); document.getElementById("newTokenWrap").innerHTML = '<div class="mb-3 p-3 rounded-lg" style="background:rgba(74,140,111,0.06);"><div class="text-[10px] uppercase mb-1" style="color:var(--c-sub);">Token (shown once)</div><code class="text-xs break-all">' + esc(r.token) + "</code></div>"; await loadTokens(); } catch (e) { toast(e.message, true); }
+var tokenModalState = { open: false, phase: "label", label: "hermes-agent", token: "", error: "", copy: "", refreshWarning: "", submitting: false, opener: null };
+function sanitizeFrontendError(e) {
+  var msg = e && e.message ? String(e.message) : "Token generation failed";
+  if (/sql|stack|trace|token_hash|session|exception|d1_|sqlite/i.test(msg)) return "Token generation failed. Please try again.";
+  return msg.slice(0, 240);
 }
-async function loadTokens() { try { M._tokens = await api("/api/tokens"); navigate("api"); } catch (e) {} }
-async function revokeToken(id) { if (!confirm("Revoke this token?")) return; try { await api("/api/tokens/" + id, { method: "DELETE" }); await loadTokens(); toast("Revoked"); } catch (e) { toast(e.message, true); } }
+function openTokenModal(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  tokenModalState = { open: true, phase: "label", label: tokenModalState.label || "hermes-agent", token: "", error: "", copy: "", refreshWarning: "", submitting: false, opener: document.getElementById("generateTokenBtn") };
+  renderTokenModal();
+}
+function tokenModalHtml() {
+  var disabled = tokenModalState.submitting ? " disabled" : "";
+  var label = esc(tokenModalState.label || "");
+  var msg = tokenModalState.phase === "submitting" ? '<p id="tokenModalStatus" class="text-sm" style="color:var(--c-sub);">Generating token…</p>' : "";
+  var err = tokenModalState.error ? '<div role="alert" class="p-3 rounded-lg text-sm" style="background:rgba(196,75,75,.08);color:var(--c-danger);">' + esc(tokenModalState.error) + '</div>' : "";
+  var warn = tokenModalState.refreshWarning ? '<div role="status" class="p-3 rounded-lg text-sm" style="background:rgba(212,162,78,.12);color:#8a5a00;">' + esc(tokenModalState.refreshWarning) + '</div>' : "";
+  if (tokenModalState.phase === "created") {
+    return '<div class="space-y-3">' + warn + '<p class="text-sm font-semibold" style="color:var(--c-danger);">This token is shown only once. Copy it before closing.</p><label for="createdTokenText" class="block text-xs font-semibold" style="color:var(--c-sub);">Complete token</label><code id="createdTokenText" tabindex="0" class="block p-3 rounded-lg text-xs break-all overflow-x-auto" style="background:#1e293b;color:#e2e8f0;max-width:100%;white-space:pre-wrap;word-break:break-all;">' + esc(tokenModalState.token) + '</code><div id="tokenCopyStatus" role="status" class="text-xs" style="color:var(--c-sub);">' + esc(tokenModalState.copy) + '</div><div class="grid grid-cols-1 sm:grid-cols-2 gap-2"><button id="copyTokenBtn" type="button" class="btn-primary px-4 py-2 rounded-lg text-sm" onclick="copyCreatedToken(event)">Copy token</button><button id="doneTokenBtn" type="button" class="px-4 py-2 rounded-lg text-sm font-semibold" style="background:rgba(53,88,114,.08);color:var(--c-primary);" onclick="closeTokenModal(event)">Done</button></div></div>';
+  }
+  return '<form id="tokenGenerateForm" class="space-y-3" onsubmit="submitTokenModal(event)"><label for="tokenLabelInput" class="block text-xs font-semibold" style="color:var(--c-sub);">Token label</label><input id="tokenLabelInput" name="label" autocomplete="off" class="w-full px-3 py-2 rounded-lg border text-sm" style="border-color:var(--c-focus);background:#fff;color:var(--c-ink);" value="' + label + '"' + disabled + '><p class="text-xs" style="color:var(--c-sub);">Use a descriptive label, for example the agent or device name.</p>' + msg + err + '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2"><button id="tokenSubmitBtn" type="submit" class="btn-primary px-4 py-2 rounded-lg text-sm"' + disabled + '>' + (tokenModalState.submitting ? 'Generating…' : 'Generate') + '</button><button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold" style="background:rgba(53,88,114,.08);color:var(--c-primary);" onclick="closeTokenModal(event)"' + disabled + '>Cancel</button></div></form>';
+}
+function renderTokenModal() {
+  var existing = document.getElementById("tokenModalMask");
+  if (!tokenModalState.open) { if (existing) existing.remove(); document.body.classList.remove("modal-open"); return; }
+  if (!existing) {
+    var mask = document.createElement("div");
+    mask.id = "tokenModalMask";
+    mask.className = "modal-mask";
+    mask.setAttribute("data-visible", "true");
+    mask.addEventListener("mousedown", function (e) { if (e.target === mask && !tokenModalState.submitting) closeTokenModal(e); });
+    document.body.appendChild(mask);
+  }
+  var m = document.getElementById("tokenModalMask");
+  m.innerHTML = '<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="tokenModalTitle" style="max-width:min(92vw,560px);max-height:88vh;overflow:auto;" onclick="event.stopPropagation()"><div class="flex items-center justify-between mb-4"><h2 id="tokenModalTitle" class="text-lg font-bold" style="color: var(--c-primary);">Generate API token</h2><button id="tokenModalClose" type="button" aria-label="Close token dialog" onclick="closeTokenModal(event)" style="background:none;border:none;cursor:pointer;color:var(--c-sub);font-size:22px;line-height:1;"' + (tokenModalState.submitting ? ' disabled' : '') + '>&times;</button></div>' + tokenModalHtml() + '</div>';
+  document.body.classList.add("modal-open");
+  setTimeout(function(){ var f=document.getElementById(tokenModalState.phase === "created" ? "copyTokenBtn" : "tokenLabelInput"); if(f) f.focus(); },0);
+}
+function closeTokenModal(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  if (tokenModalState.submitting) return;
+  var opener = tokenModalState.opener;
+  tokenModalState.open = false; tokenModalState.token = ""; tokenModalState.error = ""; tokenModalState.copy = "";
+  renderTokenModal();
+  if (opener && opener.focus) setTimeout(function(){ opener.focus(); },0);
+}
+async function submitTokenModal(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  if (tokenModalState.submitting || tokenModalState.phase === "created") return;
+  var inp = document.getElementById("tokenLabelInput");
+  var label = inp ? inp.value.trim() : "";
+  if (!label) { tokenModalState.error = "Token label is required."; renderTokenModal(); return; }
+  tokenModalState.label = label; tokenModalState.phase = "submitting"; tokenModalState.submitting = true; tokenModalState.error = ""; renderTokenModal();
+  try {
+    var r = await api("/api/tokens", { method: "POST", body: { label: label } });
+    tokenModalState.token = String(r && r.token || ""); tokenModalState.phase = "created"; tokenModalState.submitting = false;
+    if (!tokenModalState.token) tokenModalState.error = "The server did not return a token.";
+    try { await loadTokens({ render: true }); } catch (refreshErr) { tokenModalState.refreshWarning = "Token was created, but the token list could not be refreshed."; }
+  } catch (err) { tokenModalState.phase = "label"; tokenModalState.submitting = false; tokenModalState.error = sanitizeFrontendError(err); }
+  renderTokenModal();
+}
+async function copyCreatedToken(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  var token = tokenModalState.token; if (!token) return;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(token);
+    else {
+      var ta = document.createElement("textarea"); ta.value = token; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.left = "-9999px"; document.body.appendChild(ta); ta.select(); if (!document.execCommand("copy")) throw new Error("copy failed"); ta.remove();
+    }
+    tokenModalState.copy = "Copied.";
+  } catch (err) { tokenModalState.copy = "Copy failed. The token remains visible so you can copy it manually."; }
+  renderTokenModal();
+}
+async function generateToken(e) { openTokenModal(e); }
+async function loadTokens(opts) { opts = opts || {}; M._tokens = await api("/api/tokens"); if (opts.render && currentPage === "api") { var pc = document.getElementById("pageContent"); if (pc) { pc.innerHTML = renderAPI(); if (window.lucide) lucide.createIcons(); } } }
+async function revokeToken(id) { if (!confirm("Revoke this token?")) return; try { await api("/api/tokens/" + id, { method: "DELETE" }); await loadTokens({ render: true }); toast("Revoked"); } catch (e) { toast(e.message, true); } }
 
 /* Logout */
 async function doLogout() { try { await api("/api/auth/logout", { method: "POST" }); } catch (e) {} window.location.href = "/login"; }
