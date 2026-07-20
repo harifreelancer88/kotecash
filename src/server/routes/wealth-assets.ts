@@ -5,7 +5,7 @@ import { diagnoseAssetIdentifierAmbiguity } from "../wealth/imports";
 import { isEnumValue, normalizeCurrency, normalizeIdentifier, optionalText, parseQueryBoolean, requiredText } from "../wealth/validation";
 
 const wealthAssets = new Hono<{ Bindings: Bindings; Variables: Variables }>();
-const editable = ["asset_type", "name", "symbol", "isin", "exchange", "scheme_code", "currency", "price_source", "pricing_mode", "valuation_mode", "account_id", "is_active", "notes", "metadata"];
+const editable = ["asset_type", "name", "symbol", "isin", "exchange", "scheme_code", "currency", "price_source", "pricing_mode", "valuation_mode", "account_id", "is_active", "notes", "metadata", "price_provider", "provider_symbol", "provider_exchange", "provider_scheme_code", "automatic_price_refresh", "last_price_refresh_at", "last_price_refresh_status", "last_price_refresh_error", "last_provider_timestamp", "last_provider_trade_date"];
 function bad(error: string) { return { error }; }
 function routeId(c: AppContext) {
   const direct = Number(c.req.param("id"));
@@ -21,11 +21,13 @@ function normalize(body: any, partial = false) {
   if (!partial || "pricing_mode" in body) { const v = body.pricing_mode ?? "manual"; if (!isEnumValue(PRICING_MODES, v)) return { error: "Invalid pricing_mode" }; out.pricing_mode = v; }
   if (!partial || "valuation_mode" in body) { const v = body.valuation_mode ?? null; if (v && !isEnumValue(VALUATION_MODES, v)) return { error: "Invalid valuation_mode" }; out.valuation_mode = v; }
   if (!partial || "currency" in body) { const c = normalizeCurrency(body.currency); if (!c) return { error: "Invalid currency" }; out.currency = c; }
-  for (const f of ["symbol", "isin", "exchange", "scheme_code"] as const) if (!partial || f in body) out[f] = normalizeIdentifier(body[f]);
+  for (const f of ["symbol", "isin", "exchange", "scheme_code", "provider_symbol", "provider_exchange", "provider_scheme_code"] as const) if (!partial || f in body) out[f] = normalizeIdentifier(body[f]);
   if (!partial || "notes" in body) out.notes = optionalText(body.notes);
   if (!partial || "metadata" in body) out.metadata = body.metadata == null || body.metadata === "" ? null : (typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata));
   if (!partial || "account_id" in body) out.account_id = body.account_id == null || body.account_id === "" ? null : Number(body.account_id);
   if (!partial || "is_active" in body) out.is_active = body.is_active === false || body.is_active === 0 ? 0 : 1;
+  if (!partial || "automatic_price_refresh" in body) out.automatic_price_refresh = body.automatic_price_refresh === true || body.automatic_price_refresh === 1 ? 1 : 0;
+  if (!partial || "price_provider" in body) { const v = body.price_provider ?? "manual"; if (!["manual","nse_bhavcopy","yahoo_finance","mfapi"].includes(v)) return { error: "Invalid price_provider" }; out.price_provider = v; }
   return { value: out };
 }
 

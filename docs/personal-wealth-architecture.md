@@ -970,3 +970,56 @@ Wallet trust is improved through explicit opening-balance snapshots, dated accou
 Phase 20 adds an Income module that models configured income sources and expected occurrences separately from the universal Ledger. Actual income, balances, and Net Worth continue to be derived only from Ledger movements. Expected salary, freelance, business, rental, pension, benefit, interest, dividend, reimbursement, refund, bonus, and other income are used for planning, upcoming-credit views, reconciliation, and forecast scenarios without creating duplicate Ledger records.
 
 Income occurrence matching links expected items to existing Ledger credits through explicit allocations. This supports split receipts and combined salary/bonus credits while preserving imported, PennyWise, or manually entered movement provenance. Clean-income definitions exclude reimbursements, refunds, loan proceeds, internal transfers, and investment redemptions from earned-income and savings-rate analytics. Dashboard and Budget integrations surface compact expected-versus-actual metrics while keeping forecasts separate from actual cash flow.
+
+## Indian end-of-day market price refresh
+
+KoteCash stores automated Indian prices in the existing `investment_prices` table so holdings, performance, XIRR, and net-worth calculations continue to use the established latest-price flow. The feature is for personal portfolio tracking only; prices are end-of-day or delayed and must not be used for trading, order execution, intraday pricing, or investment decisions.
+
+### Providers
+
+- **NSE official close** (`nse_bhavcopy`) is the primary source for NSE-listed stocks and ETFs. The provider isolates construction of the CM-UDiFF Common Bhavcopy Final ZIP URL in `nseUdKiffUrl()` and parses CSV columns by header names such as `TckrSymb`, `SctySrs`, `TradDt`, and `ClsPric`.
+- **Yahoo fallback** (`yahoo_finance`) is a replaceable server-side fallback for unmatched symbols, BSE-only assets, or transient bhavcopy failures. It uses the chart endpoint only, with low concurrency, and never scrapes browser HTML.
+- **MFAPI NAV** (`mfapi`) is used for Indian mutual funds by configured scheme code. Scheduled refresh does not match funds by name.
+- **Manual** (`manual`) remains the default and safe fallback for all existing assets.
+
+### Asset configuration
+
+Each asset may set `price_provider`, `provider_symbol`, `provider_exchange`, `provider_scheme_code`, and `automatic_price_refresh`. Examples:
+
+- NSE stock: `price_provider=nse_bhavcopy`, `provider_symbol=RELIANCE`, `provider_exchange=NSE`, `automatic_price_refresh=true`.
+- Yahoo fallback: `price_provider=yahoo_finance`, `provider_symbol=RELIANCE.NS`.
+- Mutual fund: `price_provider=mfapi`, `provider_scheme_code=122639`, `automatic_price_refresh=true`.
+
+Disable automatic refresh by setting `automatic_price_refresh=false` or `price_provider=manual`.
+
+### Schedules
+
+Cloudflare cron is configured for weekday Indian market refresh attempts:
+
+- `45 10 * * 1-5` = 4:15 PM IST stock attempt.
+- `15 11 * * 1-5` = 4:45 PM IST stock retry.
+- `0 12 * * 1-5` = 5:30 PM IST final stock retry.
+- `30 17 * * 1-5` = 11:00 PM IST mutual-fund NAV refresh.
+
+Cron invocations are handled by the Worker `scheduled` export, which dispatches each configured expression to the shared refresh orchestration service. Stock retry cron events no-op when that user/scope/target date already has a completed batch. Missing NSE files plus stale fallback timestamps are treated as no-new-data/holiday-style outcomes, never as a reason to erase prices.
+
+### Manual refresh and audit
+
+Authenticated users can call `POST /api/wealth/prices/refresh` with `{ "scope": "all" }`, `{ "scope": "stocks" }`, `{ "scope": "mutual_funds" }`, or selected `assetIds`. Manual refresh has a 10-minute cooldown unless `force` is true. Audit summaries are available at `GET /api/wealth/prices/refresh-history` and `GET /api/wealth/prices/refresh-history/:batchId`.
+
+### Idempotency and precedence
+
+The same asset/date reuses the existing `(user_id, asset_id, price_date)` uniqueness rule. Manual prices on the same date are protected unless force is explicitly requested. Newer stored prices are not overwritten by older provider trade dates. Precedence is manual override, NSE official close, MFAPI NAV, then Yahoo fallback.
+
+### Runtime requirements
+
+Wrangler 4 requires Node.js 22 or later for local D1 migration validation and dry-run deployment checks. The repository includes `.nvmrc` and `package.json` engines metadata to make this explicit.
+
+### Troubleshooting
+
+- **NSE file not yet published**: retry later; configured cron attempts run again at 4:45 PM and 5:30 PM IST.
+- **HTML challenge response**: the ZIP validator rejects HTML/non-ZIP payloads and preserves existing prices.
+- **Yahoo 429 or 5xx**: the fallback is rate-limited and retryable; existing valid prices are retained.
+- **MFAPI stale NAV**: stale or non-newer NAVs are skipped.
+- **Unmapped symbol**: set `provider_symbol` or `provider_scheme_code` on the asset.
+- **Duplicate/stale data skipped**: repeated refreshes are safe because existing rows are reused and newer prices are protected.
