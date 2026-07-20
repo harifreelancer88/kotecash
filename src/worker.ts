@@ -6,10 +6,14 @@ async function astroWorker() {
   return import('../dist/_worker.js/index.js') as Promise<{ default: ExportedHandler<Env> }>;
 }
 
+export function forwardToAstroWorker(worker: ExportedHandler<Env>, request: Request, env: Env, ctx: ExecutionContext) {
+  return worker.fetch!(request, env, ctx);
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const worker = await astroWorker();
-    return worker.default.fetch!(request as any, env, ctx);
+    return forwardToAstroWorker(worker.default, request as any, env, ctx);
   },
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     await dispatchIndianMarketPriceCron(env, controller.cron, ctx);
