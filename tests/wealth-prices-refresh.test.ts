@@ -40,7 +40,7 @@ describe('wealth prices browser rendering',()=>{
   });
   it('renders partial refresh run and legacy assets without provider fields',async()=>{
     const html=await renderWith([{status:'partially_completed',updated_count:1,skipped_count:0,failed_count:1,providers:{mfapi:1}}],[],[{id:1,name:'Legacy Fund'}]);
-    expect(html).toContain('partially_completed'); expect(html).toContain('Legacy Fund');
+    expect(html).toContain('Failed: 1'); expect(html).toContain('Legacy Fund');
   });
   it('keeps prices usable when refresh-history API returns an error shape',async()=>{
     const context:any={console,document:{getElementById:()=>null},window:{}};
@@ -67,7 +67,7 @@ describe('wealth prices refresh button behaviour',()=>{
     let resolve:any; const pending=new Promise(r=>{resolve=r}); const s=setup(()=>pending);
     const p1=s.context.window.WealthPrices.refresh({preventDefault:()=>s.calls.push({prevented:true})});
     const p2=s.context.window.WealthPrices.refresh({preventDefault:()=>s.calls.push({prevented:true})});
-    expect(s.docEls.wealthRefreshButton.disabled).toBe(true); expect(s.docEls.wealthRefreshButton.textContent).toContain('Refreshing'); expect(s.calls.filter(c=>c.body)).toHaveLength(1); expect(s.calls.find(c=>c.body).body).toEqual({scope:'all',force:false});
+    expect(s.docEls.wealthRefreshButton.disabled).toBe(true); expect(s.docEls.wealthRefreshButton.textContent).toContain('Refreshing'); expect(s.calls.filter(c=>c.body)).toHaveLength(1); expect(s.calls.find(c=>c.body).body).toEqual({scope:'google_sheets',force:false});
     resolve({batchId:1,status:'completed',requested:1,updated:1,unchanged:0,failed:0,results:[]}); await p1; await p2;
     expect(s.calls.some(c=>String(c.toast).includes('Refresh completed: 1 updated, 0 unchanged, 0 failed'))).toBe(true);
     expect(s.calls.some(c=>c.load==='prices')).toBe(true);

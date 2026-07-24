@@ -8,6 +8,10 @@ export type Bindings = {
   MARKET_DATA_TIMEOUT_MS?: string;
   MARKET_DATA_MAX_SYMBOLS_PER_REFRESH?: string;
   MARKET_DATA_STALE_HOURS?: string;
+  PRICE_FEED_MODE?: string;
+  GOOGLE_SHEETS_PRICE_FEED_URL?: string;
+  GOOGLE_SHEETS_PRICE_FEED_TOKEN?: string;
+  GOOGLE_SHEETS_PRICE_FEED_TIMEOUT_MS?: string;
 };
 
 export type Variables = {

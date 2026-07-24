@@ -3,9 +3,10 @@ import type { AppContext, Bindings, Variables } from "../types";
 import { ASSET_TYPES, PRICE_SOURCES, PRICING_MODES, VALUATION_MODES } from "../wealth/types";
 import { diagnoseAssetIdentifierAmbiguity } from "../wealth/imports";
 import { isEnumValue, normalizeCurrency, normalizeIdentifier, optionalText, parseQueryBoolean, requiredText } from "../wealth/validation";
+import { normalizeFeedAssetKey } from "../wealth/google-sheets-price-feed";
 
 const wealthAssets = new Hono<{ Bindings: Bindings; Variables: Variables }>();
-const editable = ["asset_type", "name", "symbol", "isin", "exchange", "scheme_code", "currency", "price_source", "pricing_mode", "valuation_mode", "account_id", "is_active", "notes", "metadata", "price_provider", "provider_symbol", "provider_exchange", "provider_scheme_code", "automatic_price_refresh", "last_price_refresh_at", "last_price_refresh_status", "last_price_refresh_error", "last_provider_timestamp", "last_provider_trade_date"];
+const editable = ["asset_type", "name", "symbol", "isin", "exchange", "scheme_code", "currency", "price_source", "pricing_mode", "valuation_mode", "account_id", "is_active", "notes", "metadata", "price_provider", "provider_symbol", "provider_exchange", "provider_scheme_code", "automatic_price_refresh", "last_price_refresh_at", "last_price_refresh_status", "last_price_refresh_error", "last_provider_timestamp", "last_provider_trade_date", "price_feed_asset_key"];
 function bad(error: string) { return { error }; }
 function routeId(c: AppContext) {
   const direct = Number(c.req.param("id"));
@@ -22,6 +23,7 @@ function normalize(body: any, partial = false) {
   if (!partial || "valuation_mode" in body) { const v = body.valuation_mode ?? null; if (v && !isEnumValue(VALUATION_MODES, v)) return { error: "Invalid valuation_mode" }; out.valuation_mode = v; }
   if (!partial || "currency" in body) { const c = normalizeCurrency(body.currency); if (!c) return { error: "Invalid currency" }; out.currency = c; }
   for (const f of ["symbol", "isin", "exchange", "scheme_code", "provider_symbol", "provider_exchange", "provider_scheme_code"] as const) if (!partial || f in body) out[f] = normalizeIdentifier(body[f]);
+  if (!partial || "price_feed_asset_key" in body) out.price_feed_asset_key = normalizeFeedAssetKey(body.price_feed_asset_key);
   if (!partial || "notes" in body) out.notes = optionalText(body.notes);
   if (!partial || "metadata" in body) out.metadata = body.metadata == null || body.metadata === "" ? null : (typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata));
   if (!partial || "account_id" in body) out.account_id = body.account_id == null || body.account_id === "" ? null : Number(body.account_id);
@@ -45,6 +47,10 @@ async function duplicate(c: AppContext, uid: number, v: any, excludeId?: number)
   if (v.symbol && v.exchange && v.asset_type) {
     const row = await c.env.DB.prepare(`SELECT id FROM investment_assets WHERE user_id=? AND symbol=? AND exchange=? AND asset_type=?${extra} LIMIT 1`).bind(uid, v.symbol, v.exchange, v.asset_type, ...tail).first();
     if (row) return "Symbol/exchange/type already exists";
+  }
+  if (v.price_feed_asset_key && v.is_active !== 0) {
+    const row = await c.env.DB.prepare(`SELECT id FROM investment_assets WHERE user_id=? AND is_active<>0 AND lower(price_feed_asset_key)=lower(?)${extra} LIMIT 1`).bind(uid, v.price_feed_asset_key, ...tail).first();
+    if (row) return "Google Sheets asset key already exists";
   }
   if (!v.isin && !v.scheme_code && !v.symbol && !v.exchange && v.name && v.asset_type) {
     const row = await c.env.DB.prepare(`SELECT id FROM investment_assets WHERE user_id=? AND is_active=1 AND lower(name)=lower(?) AND asset_type=?${extra} LIMIT 1`).bind(uid, v.name, v.asset_type, ...tail).first();
