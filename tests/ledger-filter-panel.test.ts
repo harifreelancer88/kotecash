@@ -20,10 +20,23 @@ const labelFor = (html: string, id: string, text: string) => html.includes(`<lab
 const count = (html: string, pattern: RegExp) => (html.match(pattern) || []).length;
 
 describe('ledger mobile filter panel', () => {
+  it('keeps the default toolbar focused on search, filters, bulk select, and add', () => {
+    const c = context();
+    const html = c.renderLedgerControls();
+    expect(html).toContain('Search notes, payee, amount...');
+    expect(html).toContain('Filters');
+    expect(html).toContain('Bulk select');
+    expect(html).toContain('Add transaction');
+    expect(html).toContain('id="ledgerFilters" class="ledger-filters "');
+    expect(html).not.toContain('Clear all');
+  });
+
   it('renders persistent labels associated to every visible filter control', () => {
     const c = context();
+    c.ledgerState.filtersOpen = true;
     c.ledgerState.filters.dateMode = 'range';
     const html = c.renderLedgerControls();
+    expect(html).toContain('id="ledgerFilters" class="ledger-filters open"');
     expect(labelFor(html, 'ledCat', 'Category')).toBe(true);
     expect(labelFor(html, 'ledType', 'Transaction type')).toBe(true);
     expect(labelFor(html, 'ledDateMode', 'Date filter')).toBe(true);
@@ -96,10 +109,38 @@ describe('ledger mobile filter panel', () => {
 
   it('Clear all resets search, filters, date mode, and date values', () => {
     const c = context();
+    c.ledgerState.filtersOpen = true;
     Object.assign(c.ledgerState.filters, { q: 'coffee', cat: 'Food', type: 'expense', dateMode: 'range', date: '2026-07-20', from: '2026-07-01', to: '2026-07-31', month: '2026-07' });
     c.renderPage = () => '';
     c.clearLedgerFilters();
     expect(c.ledgerState.filters).toEqual({ q: '', cat: '', type: '', dateMode: 'all', date: '', from: '', to: '', month: '' });
+    expect(c.ledgerState.filtersOpen).toBe(false);
+  });
+
+  it('renders removable chips for active filters', () => {
+    const c = context();
+    Object.assign(c.ledgerState.filters, { q: 'coffee', cat: 'Food', type: 'expense', dateMode: 'specific', date: '2026-07-20' });
+    const html = c.renderLedgerControls();
+    expect(html).toContain('ledger-filter-chips');
+    expect(html).toContain('Search: coffee');
+    expect(html).toContain('Food');
+    expect(html).toContain('Expense');
+    expect(html).toContain('20 Jul 2026');
+    c.renderPage = () => '';
+    c.clearLedgerFilter('cat');
+    expect(c.ledgerState.filters.cat).toBe('');
+    c.clearLedgerFilter('date');
+    expect(c.ledgerState.filters.dateMode).toBe('all');
+  });
+
+  it('shows the bulk action bar only in bulk select mode', () => {
+    const c = context();
+    expect(c.renderLedgerControls()).not.toContain('selected</b>');
+    c.ledgerState.selectionMode = true;
+    const html = c.renderLedgerControls();
+    expect(html).toContain('Cancel');
+    expect(html).toContain('0 selected');
+    expect(html).toContain('Delete selected');
   });
 
   it('keeps date and month input text visible for Chrome Android', () => {
